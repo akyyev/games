@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="pageTitle">Russian Checkers</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="game" aria-label="Russian checkers game" data-i18n-aria="gameAria">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" data-i18n="eyebrow">Russian draughts</p>
+            <h1 data-i18n="title">Checkers Arena</h1>
+          </div>
+          <div class="scoreboard" aria-label="Piece counts" data-i18n-aria="pieceCountsAria">
+            <div>
+              <span id="whiteCount">12</span>
+              <small data-i18n="white">White</small>
+            </div>
+            <div>
+              <span id="blackCount">12</span>
+              <small data-i18n="black">Black</small>
+            </div>
+          </div>
+        </header>
+
+        <div class="table">
+          <div class="files files-top" aria-hidden="true">
+            <span>a</span><span>b</span><span>c</span><span>d</span>
+            <span>e</span><span>f</span><span>g</span><span>h</span>
+          </div>
+          <div class="board-wrap">
+            <div class="ranks" aria-hidden="true">
+              <span>8</span><span>7</span><span>6</span><span>5</span>
+              <span>4</span><span>3</span><span>2</span><span>1</span>
+            </div>
+            <div id="board" class="board" role="grid" aria-label="Checker board" data-i18n-aria="boardAria"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" aria-label="Game controls" data-i18n-aria="controlsAria">
+        <div class="status">
+          <span id="turnPill" class="turn-pill white"></span>
+          <h2 id="statusText"></h2>
+          <p id="hintText"></p>
+        </div>
+
+        <div class="control-group">
+          <label for="languageSelect" data-i18n="languageLabel">Language</label>
+          <select id="languageSelect">
+            <option value="en" selected data-i18n="languageEnglish">English</option>
+            <option value="ru" data-i18n="languageRussian">Russian</option>
+            <option value="tr" data-i18n="languageTurkish">Turkish</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="modeSelect" data-i18n="modeLabel">Mode</label>
+          <select id="modeSelect">
+            <option value="human" data-i18n="modeHuman">2 players</option>
+            <option value="computer" selected data-i18n="modeComputer">1 vs computer</option>
+          </select>
+        </div>
+
+        <div class="control-group" id="sideControl">
+          <label for="sideSelect" data-i18n="sideLabel">Your side</label>
+          <select id="sideSelect">
+            <option value="white" selected data-i18n="sideWhite">White</option>
+            <option value="black" data-i18n="sideBlack">Black</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="levelSelect" data-i18n="levelLabel">Computer level</label>
+          <select id="levelSelect">
+            <option value="easy" data-i18n="levelEasy">Beginner</option>
+            <option value="medium" selected data-i18n="levelMedium">Club Player</option>
+            <option value="hard" data-i18n="levelHard">Master</option>
+            <option value="extra-hard" data-i18n="levelExtraHard">Grandmaster</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="styleSelect" data-i18n="styleLabel">Board style</label>
+          <select id="styleSelect">
+            <option value="classic" selected data-i18n="styleClassic">Classic wood</option>
+            <option value="tournament" data-i18n="styleTournament">Tournament green</option>
+            <option value="midnight" data-i18n="styleMidnight">Midnight glass</option>
+            <option value="porcelain" data-i18n="stylePorcelain">Porcelain blue</option>
+          </select>
+        </div>
+
+        <label class="toggle-row" for="soundToggle">
+          <span data-i18n="soundLabel">Move sounds</span>
+          <input id="soundToggle" type="checkbox" checked />
+        </label>
+
+        <div class="actions">
+          <button id="newGameBtn" type="button" data-i18n="newGame">New game</button>
+          <button id="undoBtn" type="button" class="secondary" data-i18n="undoMove">Undo</button>
+          <button id="flipBtn" type="button" class="secondary" data-i18n="flipBoard">Flip board</button>
+        </div>
+
+        <div class="rules">
+          <h3 data-i18n="rulesTitle">Rules in play</h3>
+          <ul>
+            <li data-i18n="ruleMenCapture">Men capture forward and backward.</li>
+            <li data-i18n="ruleChains">Capture chains continue with the same piece.</li>
+            <li data-i18n="ruleCrown">Men crown immediately on the back rank.</li>
+            <li data-i18n="ruleKings">Kings move and capture over any distance.</li>
+          </ul>
+        </div>
+
+        <ol id="moveLog" class="move-log" aria-label="Move log" data-i18n-aria="moveLogAria"></ol>
+      </aside>
+    </main>
+
+    <div id="resultOverlay" class="result-overlay" hidden>
+      <section class="result-modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+        <p class="eyebrow" data-i18n="gameOver">Game over</p>
+        <h2 id="resultTitle"></h2>
+        <p id="resultScore" class="result-score"></p>
+        <button id="playAgainBtn" type="button" data-i18n="playAgain">Play again</button>
+      </section>
+    </div>
+
+    <script src="./i18n/en.js"></script>
+    <script src="./i18n/ru.js"></script>
+    <script src="./i18n/tr.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
