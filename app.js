@@ -53,6 +53,9 @@ const resultOverlay = document.querySelector("#resultOverlay");
 const resultTitle = document.querySelector("#resultTitle");
 const resultScore = document.querySelector("#resultScore");
 const playAgainBtn = document.querySelector("#playAgainBtn");
+const copyrightYear = document.querySelector("#copyrightYear");
+
+copyrightYear.textContent = new Date().getFullYear();
 
 function t(key, params = {}) {
   const dictionary = translations[state.language] || translations.en;
