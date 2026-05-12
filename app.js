@@ -445,6 +445,10 @@ function getAudioContext() {
   return audioContext;
 }
 
+function unlockAudio() {
+  getAudioContext();
+}
+
 function playTone(ctx, start, frequency, duration, type = "sine", volume = 0.08) {
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -511,6 +515,7 @@ function playMoveSound({ capture, promote, win }) {
 }
 
 function handleSquareClick(row, col) {
+  unlockAudio();
   if (state.busy || isComputerTurn()) return;
   if (state.mode === "online" && !isOnlineTurn()) return;
   const piece = state.board[row][col];
@@ -632,6 +637,7 @@ function connectOnline(action, roomId = "") {
 function applyOnlineState(room, color) {
   const previousBoard = cloneBoard(state.board);
   const hadMove = room.lastMove?.length;
+  const previousLastMove = state.lastMove.map(clonePoint);
   state.online.connected = true;
   state.online.ready = room.players.length > 1;
   state.online.roomId = room.id;
@@ -647,6 +653,19 @@ function applyOnlineState(room, color) {
   state.busy = false;
   state.history = [];
   if (hadMove) animateAcceptedMove(previousBoard, room);
+  const hasNewMove =
+    hadMove &&
+    (!previousLastMove.length ||
+      !sameSquare(previousLastMove[0], room.lastMove[0]) ||
+      !sameSquare(previousLastMove[1], room.lastMove[1]));
+  if (hasNewMove) {
+    const movedPiece = room.board[room.lastMove[1].row]?.[room.lastMove[1].col];
+    playMoveSound({
+      capture: previousBoard.flat().filter(Boolean).length > room.board.flat().filter(Boolean).length,
+      promote: Boolean(movedPiece?.king && !previousBoard[room.lastMove[0].row]?.[room.lastMove[0].col]?.king),
+      win: Boolean(room.winner),
+    });
+  }
 
   state.online.statusKey = state.online.ready ? "onlineReady" : "onlineWaiting";
   state.online.statusParams = { room: room.id, color: colorName(color) };
@@ -923,42 +942,61 @@ function render(messageKey = "", messageParams = {}) {
 }
 
 languageSelect.addEventListener("change", () => {
+  unlockAudio();
   state.language = languageSelect.value;
   render();
 });
 
 modeSelect.addEventListener("change", () => {
+  unlockAudio();
   if (state.mode === "online" && modeSelect.value !== "online") closeOnlineSocket();
   state.mode = modeSelect.value;
   resetGame();
 });
 
 sideSelect.addEventListener("change", () => {
+  unlockAudio();
   state.playerColor = sideSelect.value;
   state.flipped = state.playerColor === BLACK;
   resetGame();
 });
 
 levelSelect.addEventListener("change", () => {
+  unlockAudio();
   state.level = levelSelect.value;
   render("levelChanged");
 });
 
 styleSelect.addEventListener("change", () => {
+  unlockAudio();
   state.boardStyle = styleSelect.value;
   render("styleChanged");
 });
 
 soundToggle.addEventListener("change", () => {
   state.soundEnabled = soundToggle.checked;
+  unlockAudio();
   render(state.soundEnabled ? "soundOn" : "soundOff");
 });
 
-document.querySelector("#newGameBtn").addEventListener("click", resetGame);
-undoBtn.addEventListener("click", undoMove);
-playAgainBtn.addEventListener("click", resetGame);
-createRoomBtn.addEventListener("click", () => connectOnline("create"));
+document.querySelector("#newGameBtn").addEventListener("click", () => {
+  unlockAudio();
+  resetGame();
+});
+undoBtn.addEventListener("click", () => {
+  unlockAudio();
+  undoMove();
+});
+playAgainBtn.addEventListener("click", () => {
+  unlockAudio();
+  resetGame();
+});
+createRoomBtn.addEventListener("click", () => {
+  unlockAudio();
+  connectOnline("create");
+});
 joinRoomBtn.addEventListener("click", () => {
+  unlockAudio();
   const roomId = roomCodeInput.value.trim().toUpperCase();
   if (!roomId) {
     setOnlineStatus("onlineError", { message: t("roomCodePlaceholder") });
@@ -970,6 +1008,7 @@ roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 });
 document.querySelector("#flipBtn").addEventListener("click", () => {
+  unlockAudio();
   state.flipped = !state.flipped;
   render("boardFlipped");
 });
