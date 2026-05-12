@@ -7,6 +7,7 @@ A modern browser-based Russian checkers game with local two-player mode, compute
 - Russian draughts rules
 - 2-player local mode
 - 1 vs computer mode
+- Online room mode with a WebSocket server
 - Player side selection
 - Difficulty levels: Beginner, Club Player, Master, Grandmaster
 - English, Russian, and Turkish language support
@@ -45,6 +46,38 @@ GitHub Pages will publish the app at a URL like:
 https://your-username.github.io/your-repo-name/
 ```
 
+## Online Play Server
+
+The online mode uses a small WebSocket server in `server/`. Deploy the frontend to GitHub Pages and deploy `server/` to Render as a Web Service.
+
+For local server testing:
+
+```bash
+cd server
+npm install
+npm start
+```
+
+The local WebSocket URL is already set in [config.js](./config.js):
+
+```js
+WS_URL: "ws://localhost:10000"
+```
+
+After deploying to Render, update `config.js` to your Render WebSocket URL:
+
+```js
+WS_URL: "wss://your-checkers-server.onrender.com"
+```
+
+On Render, use:
+
+```text
+Root Directory: server
+Build Command: npm install
+Start Command: npm start
+```
+
 ## Project Structure
 
 ```text
@@ -56,5 +89,10 @@ https://your-username.github.io/your-repo-name/
 │   ├── en.js
 │   ├── ru.js
 │   └── tr.js
+├── shared/
+│   └── rules.js
+├── server/
+│   ├── index.js
+│   └── package.json
 └── README.md
 ```

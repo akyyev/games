@@ -62,6 +62,7 @@
           <select id="modeSelect">
             <option value="human" data-i18n="modeHuman">2 players</option>
             <option value="computer" selected data-i18n="modeComputer">1 vs computer</option>
+            <option value="online" data-i18n="modeOnline">Online</option>
           </select>
         </div>
 
@@ -73,7 +74,7 @@
           </select>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" id="levelControl">
           <label for="levelSelect" data-i18n="levelLabel">Computer level</label>
           <select id="levelSelect">
             <option value="easy" data-i18n="levelEasy">Beginner</option>
@@ -81,6 +82,17 @@
             <option value="hard" data-i18n="levelHard">Master</option>
             <option value="extra-hard" data-i18n="levelExtraHard">Grandmaster</option>
           </select>
+        </div>
+
+        <div id="onlinePanel" class="online-panel" hidden>
+          <div class="online-actions">
+            <button id="createRoomBtn" type="button" data-i18n="createRoom">Create room</button>
+            <div class="join-row">
+              <input id="roomCodeInput" type="text" maxlength="5" autocomplete="off" data-i18n-placeholder="roomCodePlaceholder" placeholder="Room code" />
+              <button id="joinRoomBtn" type="button" class="secondary" data-i18n="joinRoom">Join</button>
+            </div>
+          </div>
+          <p id="onlineStatus" class="online-status"></p>
         </div>
 
         <div class="control-group">
@@ -134,6 +146,7 @@
     <script src="./i18n/en.js"></script>
     <script src="./i18n/ru.js"></script>
     <script src="./i18n/tr.js"></script>
+    <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

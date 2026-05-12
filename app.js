@@ -27,6 +27,14 @@ const state = {
   busy: false,
   history: [],
   animation: null,
+  online: {
+    socket: null,
+    roomId: "",
+    connected: false,
+    ready: false,
+    statusKey: "onlineIdle",
+    statusParams: {},
+  },
   log: [],
 };
 
@@ -45,10 +53,16 @@ const languageSelect = document.querySelector("#languageSelect");
 const modeSelect = document.querySelector("#modeSelect");
 const sideControl = document.querySelector("#sideControl");
 const sideSelect = document.querySelector("#sideSelect");
+const levelControl = document.querySelector("#levelControl");
 const levelSelect = document.querySelector("#levelSelect");
 const styleSelect = document.querySelector("#styleSelect");
 const soundToggle = document.querySelector("#soundToggle");
 const undoBtn = document.querySelector("#undoBtn");
+const onlinePanel = document.querySelector("#onlinePanel");
+const createRoomBtn = document.querySelector("#createRoomBtn");
+const joinRoomBtn = document.querySelector("#joinRoomBtn");
+const roomCodeInput = document.querySelector("#roomCodeInput");
+const onlineStatus = document.querySelector("#onlineStatus");
 const resultOverlay = document.querySelector("#resultOverlay");
 const resultTitle = document.querySelector("#resultTitle");
 const resultScore = document.querySelector("#resultScore");
@@ -82,6 +96,10 @@ function applyTranslations() {
   document.querySelectorAll("[data-i18n-aria]").forEach((element) => {
     element.setAttribute("aria-label", t(element.dataset.i18nAria));
   });
+
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
+    element.setAttribute("placeholder", t(element.dataset.i18nPlaceholder));
+  });
 }
 
 function emptyBoard() {
@@ -104,6 +122,7 @@ function createInitialBoard() {
 }
 
 function resetGame() {
+  if (state.mode === "online") closeOnlineSocket();
   if (computerTimer) window.clearTimeout(computerTimer);
   computerTimer = null;
   if (animationTimer) window.clearTimeout(animationTimer);
@@ -122,6 +141,19 @@ function resetGame() {
   if (isComputerTurn()) scheduleComputerMove();
 }
 
+function resetOnlineLocalState() {
+  state.board = createInitialBoard();
+  state.turn = WHITE;
+  state.selected = null;
+  state.legalMoves = [];
+  state.chainFrom = null;
+  state.lastMove = [];
+  state.busy = false;
+  state.history = [];
+  state.animation = null;
+  state.log = [];
+}
+
 function isDark(row, col) {
   return (row + col) % 2 === 1;
 }
@@ -136,6 +168,16 @@ function opponent(color) {
 
 function computerColor() {
   return opponent(state.playerColor);
+}
+
+function isOnlineTurn() {
+  return state.mode === "online" && state.online.connected && state.online.ready && state.turn === state.playerColor;
+}
+
+function setOnlineStatus(statusKey, statusParams = {}) {
+  state.online.statusKey = statusKey;
+  state.online.statusParams = statusParams;
+  render();
 }
 
 function cloneBoard(board) {
@@ -314,7 +356,34 @@ function getCapturedPieces(move) {
   }));
 }
 
+function animateAcceptedMove(previousBoard, room) {
+  const [from, to] = room.lastMove || [];
+  if (!from || !to) return;
+  const piece = previousBoard[from.row]?.[from.col];
+  if (!piece) return;
+  const captures = [];
+  for (let row = 0; row < SIZE; row += 1) {
+    for (let col = 0; col < SIZE; col += 1) {
+      const previousPiece = previousBoard[row][col];
+      if (previousPiece && !room.board[row][col] && !(from.row === row && from.col === col)) {
+        captures.push({ row, col, piece: { ...previousPiece } });
+      }
+    }
+  }
+  state.animation = {
+    from: { ...from },
+    to: { ...to },
+    captures,
+    promote: !piece.king && room.board[to.row]?.[to.col]?.king,
+  };
+}
+
 function makeMove(move, source = "player") {
+  if (state.mode === "online" && source === "player") {
+    sendOnlineMove(move);
+    return;
+  }
+
   state.history.push(createSnapshot(source));
   const piece = state.board[move.from.row][move.from.col];
   const promotes = canPromote(piece, move);
@@ -443,6 +512,7 @@ function playMoveSound({ capture, promote, win }) {
 
 function handleSquareClick(row, col) {
   if (state.busy || isComputerTurn()) return;
+  if (state.mode === "online" && !isOnlineTurn()) return;
   const piece = state.board[row][col];
   const landingMove = state.legalMoves.find((move) => move.to.row === row && move.to.col === col);
   if (landingMove) {
@@ -502,6 +572,94 @@ function undoMove() {
   state.busy = false;
   if (snapshot) restoreSnapshot(snapshot);
   render("undone");
+}
+
+function closeOnlineSocket() {
+  if (state.online.socket) {
+    state.online.socket.close();
+    state.online.socket = null;
+  }
+  state.online.connected = false;
+  state.online.ready = false;
+  state.online.roomId = "";
+  state.online.statusKey = "onlineIdle";
+  state.online.statusParams = {};
+}
+
+function connectOnline(action, roomId = "") {
+  const url = window.CHECKERS_CONFIG?.WS_URL;
+  if (!url) {
+    setOnlineStatus("onlineError", { message: "Missing WebSocket URL." });
+    return;
+  }
+
+  closeOnlineSocket();
+  resetOnlineLocalState();
+  state.mode = "online";
+  state.playerColor = WHITE;
+  state.flipped = false;
+  setOnlineStatus("onlineConnecting");
+
+  const socket = new WebSocket(url);
+  state.online.socket = socket;
+
+  socket.addEventListener("open", () => {
+    socket.send(JSON.stringify({ type: action, roomId: roomId.toUpperCase() }));
+  });
+
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === "state") {
+      applyOnlineState(message.room, message.color);
+    } else if (message.type === "error") {
+      setOnlineStatus("onlineError", { message: message.message });
+    } else if (message.type === "notice") {
+      setOnlineStatus("onlineError", { message: message.message });
+    }
+  });
+
+  socket.addEventListener("close", () => {
+    state.online.connected = false;
+    state.online.ready = false;
+    if (state.mode === "online") setOnlineStatus("onlineIdle");
+  });
+
+  socket.addEventListener("error", () => {
+    setOnlineStatus("onlineError", { message: "Could not connect." });
+  });
+}
+
+function applyOnlineState(room, color) {
+  const previousBoard = cloneBoard(state.board);
+  const hadMove = room.lastMove?.length;
+  state.online.connected = true;
+  state.online.ready = room.players.length > 1;
+  state.online.roomId = room.id;
+  state.playerColor = color;
+  state.flipped = color === BLACK;
+  state.board = cloneBoard(room.board);
+  state.turn = room.turn;
+  state.chainFrom = clonePoint(room.chainFrom);
+  state.lastMove = (room.lastMove || []).map(clonePoint);
+  state.log = cloneLog(room.log || []);
+  state.selected = null;
+  state.legalMoves = [];
+  state.busy = false;
+  state.history = [];
+  if (hadMove) animateAcceptedMove(previousBoard, room);
+
+  state.online.statusKey = state.online.ready ? "onlineReady" : "onlineWaiting";
+  state.online.statusParams = { room: room.id, color: colorName(color) };
+  render();
+}
+
+function sendOnlineMove(move) {
+  const socket = state.online.socket;
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    setOnlineStatus("onlineError", { message: "Not connected." });
+    return;
+  }
+  socket.send(JSON.stringify({ type: "move", move }));
 }
 
 function chooseComputerMove() {
@@ -653,6 +811,8 @@ function render(messageKey = "", messageParams = {}) {
   applyTranslations();
   document.body.dataset.boardStyle = state.boardStyle;
   sideControl.hidden = state.mode !== "computer";
+  levelControl.hidden = state.mode !== "computer";
+  onlinePanel.hidden = state.mode !== "online";
   const winner = getWinner();
   const moves = winner ? [] : getAllMoves(state.board, state.turn, state.chainFrom);
   const forcedCapture = moves.some((move) => move.captures.length);
@@ -713,7 +873,7 @@ function render(messageKey = "", messageParams = {}) {
 
   whiteCount.textContent = countPieces(WHITE);
   blackCount.textContent = countPieces(BLACK);
-  undoBtn.disabled = !state.history.length;
+  undoBtn.disabled = state.mode === "online" || !state.history.length;
   turnPill.className = `turn-pill ${state.turn}`;
   turnPill.textContent = t("turn", { color: colorName(state.turn) });
 
@@ -723,7 +883,9 @@ function render(messageKey = "", messageParams = {}) {
   } else {
     statusText.textContent =
       (messageKey ? t(messageKey, messageParams) : "") ||
-      (isComputerTurn()
+      (state.mode === "online"
+        ? t(isOnlineTurn() ? "onlineYourTurn" : "onlineOpponentTurn")
+        : isComputerTurn()
         ? t("computerReady")
         : state.chainFrom
           ? t("continueCapture")
@@ -748,6 +910,7 @@ function render(messageKey = "", messageParams = {}) {
   }
 
   renderResultOverlay(winner);
+  onlineStatus.textContent = t(state.online.statusKey, state.online.statusParams);
 
   if (state.animation) {
     if (animationTimer) window.clearTimeout(animationTimer);
@@ -765,6 +928,7 @@ languageSelect.addEventListener("change", () => {
 });
 
 modeSelect.addEventListener("change", () => {
+  if (state.mode === "online" && modeSelect.value !== "online") closeOnlineSocket();
   state.mode = modeSelect.value;
   resetGame();
 });
@@ -793,6 +957,18 @@ soundToggle.addEventListener("change", () => {
 document.querySelector("#newGameBtn").addEventListener("click", resetGame);
 undoBtn.addEventListener("click", undoMove);
 playAgainBtn.addEventListener("click", resetGame);
+createRoomBtn.addEventListener("click", () => connectOnline("create"));
+joinRoomBtn.addEventListener("click", () => {
+  const roomId = roomCodeInput.value.trim().toUpperCase();
+  if (!roomId) {
+    setOnlineStatus("onlineError", { message: t("roomCodePlaceholder") });
+    return;
+  }
+  connectOnline("join", roomId);
+});
+roomCodeInput.addEventListener("input", () => {
+  roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+});
 document.querySelector("#flipBtn").addEventListener("click", () => {
   state.flipped = !state.flipped;
   render("boardFlipped");
