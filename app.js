@@ -202,11 +202,10 @@ function resetGame() {
 }
 
 function initializeGame() {
-  const roomFromUrl = new URLSearchParams(window.location.search).get("room");
+  const roomFromUrl = normalizeRoomId(new URLSearchParams(window.location.search).get("room"));
   if (roomFromUrl) {
     state.mode = "online";
     modeSelect.value = "online";
-    render();
     connectOnline("join", roomFromUrl);
     return;
   }
@@ -259,9 +258,26 @@ function setOnlineStatus(statusKey, statusParams = {}) {
   render();
 }
 
+function normalizeRoomId(value = "") {
+  const text = String(value).trim();
+  if (!text) return "";
+
+  try {
+    const url = new URL(text, window.location.href);
+    const room = url.searchParams.get("room");
+    if (room) return normalizeRoomId(room);
+  } catch {
+    // Treat non-URL input as a plain room code.
+  }
+
+  return text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+}
+
 function getRoomLink() {
   if (!state.online.roomId) return "";
   const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
   url.searchParams.set("room", state.online.roomId);
   return url.toString();
 }
@@ -770,6 +786,7 @@ function closeOnlineSocket() {
 
 function connectOnline(action, roomId = "") {
   const url = window.CHECKERS_CONFIG?.WS_URL;
+  const normalizedRoomId = normalizeRoomId(roomId);
   if (!url) {
     setOnlineStatus("onlineError", { message: "Missing WebSocket URL." });
     return;
@@ -786,7 +803,7 @@ function connectOnline(action, roomId = "") {
   state.online.socket = socket;
 
   socket.addEventListener("open", () => {
-    socket.send(JSON.stringify({ type: action, roomId: roomId.toUpperCase() }));
+    socket.send(JSON.stringify({ type: action, roomId: normalizedRoomId }));
   });
 
   socket.addEventListener("message", (event) => {
@@ -1032,6 +1049,20 @@ function render(messageKey = "", messageParams = {}) {
   const pieceCounts = getPieceCounts();
   const winner = getWinner(pieceCounts);
   const draw = state.draw;
+  const turnOwner =
+    winner || draw
+      ? "neutral"
+      : state.mode === "online"
+        ? isOnlineTurn()
+          ? "player"
+          : "opponent"
+        : state.mode === "computer"
+          ? isComputerTurn()
+            ? "opponent"
+            : "player"
+          : "local";
+  document.body.dataset.turn = winner || draw ? "neutral" : state.turn;
+  document.body.dataset.turnOwner = turnOwner;
   const moves = winner || draw ? [] : getAllMoves(state.board, state.turn, state.chainFrom);
   const forcedCapture = moves.some((move) => move.captures.length);
   const selectedMoves = state.selected
@@ -1224,15 +1255,16 @@ shareRoomBtn.addEventListener("click", () => {
 });
 joinRoomBtn.addEventListener("click", () => {
   unlockAudio();
-  const roomId = roomCodeInput.value.trim().toUpperCase();
+  const roomId = normalizeRoomId(roomCodeInput.value);
   if (!roomId) {
     setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
     return;
   }
+  roomCodeInput.value = roomId;
   connectOnline("join", roomId);
 });
 roomCodeInput.addEventListener("input", () => {
-  roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  roomCodeInput.value = normalizeRoomId(roomCodeInput.value);
 });
 document.querySelector("#flipBtn").addEventListener("click", () => {
   unlockAudio();

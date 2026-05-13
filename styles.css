@@ -24,6 +24,8 @@
   --piece-ring-light: rgba(255, 255, 255, 0.58);
   --piece-ring-dark: rgba(255, 255, 255, 0.12);
   --highlight: #d9aa5b;
+  --turn-lane-primary: #7ac86d;
+  --turn-lane-neutral: #77786f;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -43,6 +45,7 @@ body[data-board-style="tournament"] {
   --piece-ring-light: rgba(130, 96, 49, 0.32);
   --piece-ring-dark: rgba(132, 164, 145, 0.2);
   --highlight: #f2c45d;
+  --turn-lane-primary: #7ac86d;
 }
 
 body[data-board-style="midnight"] {
@@ -59,6 +62,7 @@ body[data-board-style="midnight"] {
   --piece-ring-light: rgba(38, 52, 71, 0.28);
   --piece-ring-dark: rgba(206, 192, 255, 0.18);
   --highlight: #75d6c8;
+  --turn-lane-primary: #75d6c8;
 }
 
 body[data-board-style="porcelain"] {
@@ -75,6 +79,7 @@ body[data-board-style="porcelain"] {
   --piece-ring-light: rgba(67, 97, 117, 0.22);
   --piece-ring-dark: rgba(190, 226, 241, 0.2);
   --highlight: #e1a64b;
+  --turn-lane-primary: #e1a64b;
 }
 
 * {
@@ -183,7 +188,7 @@ h1 {
 .files {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  width: min(66vh, calc(100% - 1.35rem));
+  width: min(66vh, calc(100% - 2rem));
   max-width: 760px;
   margin-left: 1.35rem;
   color: var(--muted);
@@ -193,7 +198,7 @@ h1 {
 
 .board-wrap {
   display: grid;
-  grid-template-columns: 1.1rem 1fr;
+  grid-template-columns: 1.1rem minmax(0, 1fr) 0.4rem;
   gap: 0.25rem;
   align-items: stretch;
 }
@@ -205,6 +210,52 @@ h1 {
   color: var(--muted);
   font-size: 0.75rem;
   text-align: center;
+}
+
+.turn-lane {
+  display: grid;
+  align-items: stretch;
+  width: 0.34rem;
+  min-height: 0;
+}
+
+.turn-lane span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, var(--turn-lane-neutral), #15171b);
+  box-shadow: 0 0 0.55rem rgba(119, 120, 111, 0.16);
+  opacity: 0.64;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+body[data-turn="white"] .turn-lane span {
+  background: linear-gradient(to bottom, var(--turn-lane-primary) 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 40%, #101216 100%);
+  box-shadow:
+    0 0 0.55rem rgba(122, 200, 109, 0.42),
+    0 0 1.2rem rgba(122, 200, 109, 0.18);
+  opacity: 0.9;
+}
+
+body[data-turn="black"] .turn-lane span {
+  background: linear-gradient(to bottom, #101216 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 60%, var(--turn-lane-primary) 100%);
+  box-shadow:
+    0 0 0.55rem rgba(122, 200, 109, 0.38),
+    0 0 1.2rem rgba(122, 200, 109, 0.16);
+  opacity: 0.86;
+}
+
+body[data-turn-owner="player"] .turn-lane span {
+  animation: turn-lane-pulse 1.55s ease-in-out infinite;
+}
+
+body[data-turn-owner="neutral"] .turn-lane span,
+body[data-turn-owner="opponent"] .turn-lane span,
+body[data-turn-owner="local"] .turn-lane span {
+  animation: none;
 }
 
 .board {
@@ -394,7 +445,21 @@ h1 {
   }
 }
 
+@keyframes turn-lane-pulse {
+  0%,
+  100% {
+    opacity: 0.68;
+    filter: brightness(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    filter: brightness(1.18);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .turn-lane span,
   .piece.move-animate,
   .piece.crown-animate {
     animation: none;

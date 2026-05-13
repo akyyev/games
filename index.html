@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="pageTitle">Russian Checkers</title>
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
   </head>
   <body>
     <main class="shell">
@@ -37,6 +37,7 @@
               <span>4</span><span>3</span><span>2</span><span>1</span>
             </div>
             <div id="board" class="board" role="grid" aria-label="Checker board" data-i18n-aria="boardAria"></div>
+            <div class="turn-lane" aria-hidden="true"><span></span></div>
           </div>
         </div>
       </section>
@@ -88,7 +89,7 @@
           <div class="online-actions">
             <button id="createRoomBtn" type="button" data-i18n="createRoom">Create room</button>
             <div class="join-row">
-              <input id="roomCodeInput" type="text" maxlength="5" autocomplete="off" data-i18n-placeholder="roomCodePlaceholder" placeholder="Room code" />
+              <input id="roomCodeInput" type="text" autocomplete="off" data-i18n-placeholder="roomCodePlaceholder" placeholder="Room code" />
               <button id="copyRoomBtn" type="button" class="secondary icon-button" aria-label="Copy room code" title="Copy room code" data-i18n-aria="copyRoomCode" data-i18n-title="copyRoomCode">
                 <span aria-hidden="true">⧉</span>
               </button>
@@ -149,10 +150,10 @@
       </section>
     </div>
 
-    <script src="./i18n/en.js?v=3"></script>
-    <script src="./i18n/ru.js?v=3"></script>
-    <script src="./i18n/tr.js?v=3"></script>
-    <script src="./config.js?v=3"></script>
-    <script src="./app.js?v=3"></script>
+    <script src="./i18n/en.js?v=4"></script>
+    <script src="./i18n/ru.js?v=4"></script>
+    <script src="./i18n/tr.js?v=4"></script>
+    <script src="./config.js?v=4"></script>
+    <script src="./app.js?v=4"></script>
   </body>
 </html>
