@@ -262,6 +262,7 @@ function setOnlineStatus(statusKey, statusParams = {}) {
 }
 
 function normalizeRoomId(value = "") {
+  if (value == null) return "";
   const text = String(value).trim();
   if (!text) return "";
 
