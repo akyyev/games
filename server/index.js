@@ -37,6 +37,8 @@ function createRoom() {
     chainFrom: null,
     lastMove: [],
     log: [],
+    draw: false,
+    twoKingsVsOneHalfMoves: 0,
     players: new Map(),
     createdAt: Date.now(),
   };
@@ -53,7 +55,8 @@ function serializeRoom(room) {
     chainFrom: room.chainFrom,
     lastMove: room.lastMove,
     log: room.log,
-    winner: rules.getWinner(room.board, room.turn, room.chainFrom),
+    winner: room.draw ? null : rules.getWinner(room.board, room.turn, room.chainFrom),
+    draw: room.draw,
     players,
   };
 }
@@ -94,6 +97,9 @@ function joinRoom(ws, room, preferredColor = null) {
 function handleMove(ws, payload) {
   const room = rooms.get(ws.roomId);
   if (!room) return send(ws, { type: "error", message: "Room not found." });
+  if (room.draw || rules.getWinner(room.board, room.turn, room.chainFrom)) {
+    return send(ws, { type: "error", message: "Game is over." });
+  }
 
   const color = room.players.get(ws);
   if (!color || color !== room.turn) return send(ws, { type: "error", message: "Not your turn." });
@@ -117,9 +123,54 @@ function handleMove(ws, payload) {
   } else {
     room.chainFrom = null;
     room.turn = rules.opponent(room.turn);
+    updateTwoKingsVsOneCounter(room);
   }
 
   syncRoom(room);
+}
+
+function getPieceCounts(board) {
+  const counts = { [rules.WHITE]: 0, [rules.BLACK]: 0 };
+  for (const row of board) {
+    for (const piece of row) {
+      if (piece) counts[piece.color] += 1;
+    }
+  }
+  return counts;
+}
+
+function getKingCounts(board) {
+  const counts = { [rules.WHITE]: 0, [rules.BLACK]: 0 };
+  for (const row of board) {
+    for (const piece of row) {
+      if (piece?.king) counts[piece.color] += 1;
+    }
+  }
+  return counts;
+}
+
+function isTwoKingsVsOneKingEndgame(board) {
+  const pieceCounts = getPieceCounts(board);
+  if (pieceCounts[rules.WHITE] + pieceCounts[rules.BLACK] !== 3) return false;
+  const kingCounts = getKingCounts(board);
+  return (
+    pieceCounts[rules.WHITE] === kingCounts[rules.WHITE] &&
+    pieceCounts[rules.BLACK] === kingCounts[rules.BLACK] &&
+    ((kingCounts[rules.WHITE] === 2 && kingCounts[rules.BLACK] === 1) ||
+      (kingCounts[rules.WHITE] === 1 && kingCounts[rules.BLACK] === 2))
+  );
+}
+
+function updateTwoKingsVsOneCounter(room) {
+  if (isTwoKingsVsOneKingEndgame(room.board)) {
+    room.twoKingsVsOneHalfMoves += 1;
+  } else {
+    room.twoKingsVsOneHalfMoves = 0;
+  }
+
+  if (!rules.getWinner(room.board, room.turn, room.chainFrom) && room.twoKingsVsOneHalfMoves >= 20) {
+    room.draw = true;
+  }
 }
 
 const server = http.createServer((req, res) => {

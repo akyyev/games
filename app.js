@@ -30,6 +30,7 @@ const state = {
   animation: null,
   positionHistory: [],
   draw: false,
+  twoKingsVsOneHalfMoves: 0,
   online: {
     socket: null,
     roomId: "",
@@ -196,6 +197,7 @@ function resetGame() {
   state.animation = null;
   state.positionHistory = [positionKey()];
   state.draw = false;
+  state.twoKingsVsOneHalfMoves = 0;
   state.log = [];
   render();
   if (isComputerTurn()) scheduleComputerMove();
@@ -229,6 +231,7 @@ function resetOnlineLocalState() {
   state.animation = null;
   state.positionHistory = [positionKey()];
   state.draw = false;
+  state.twoKingsVsOneHalfMoves = 0;
   state.log = [];
 }
 
@@ -355,6 +358,7 @@ function createSnapshot(source = "player") {
     lastMove: state.lastMove.map(clonePoint),
     positionHistory: [...state.positionHistory],
     draw: state.draw,
+    twoKingsVsOneHalfMoves: state.twoKingsVsOneHalfMoves,
     log: cloneLog(state.log),
   };
 }
@@ -368,6 +372,7 @@ function restoreSnapshot(snapshot) {
   state.lastMove = snapshot.lastMove.map(clonePoint);
   state.positionHistory = [...(snapshot.positionHistory || [positionKey()])];
   state.draw = Boolean(snapshot.draw);
+  state.twoKingsVsOneHalfMoves = snapshot.twoKingsVsOneHalfMoves || 0;
   state.log = cloneLog(snapshot.log);
   state.animation = null;
 }
@@ -407,8 +412,39 @@ function countPositionOccurrences(key) {
 function recordCurrentPosition() {
   const key = positionKey();
   state.positionHistory.push(key);
-  if (countPositionOccurrences(key) >= 3 || hasInsufficientWinningMaterial()) {
+  updateTwoKingsVsOneCounter();
+  if (countPositionOccurrences(key) >= 3 || hasInsufficientWinningMaterial() || state.twoKingsVsOneHalfMoves >= 20) {
     state.draw = true;
+  }
+}
+
+function getKingCounts(board = state.board) {
+  const counts = { [WHITE]: 0, [BLACK]: 0 };
+  for (const row of board) {
+    for (const piece of row) {
+      if (piece?.king) counts[piece.color] += 1;
+    }
+  }
+  return counts;
+}
+
+function isTwoKingsVsOneKingEndgame() {
+  const pieceCounts = getPieceCounts();
+  if (pieceCounts[WHITE] + pieceCounts[BLACK] !== 3) return false;
+  const kingCounts = getKingCounts();
+  return (
+    pieceCounts[WHITE] === kingCounts[WHITE] &&
+    pieceCounts[BLACK] === kingCounts[BLACK] &&
+    ((kingCounts[WHITE] === 2 && kingCounts[BLACK] === 1) ||
+      (kingCounts[WHITE] === 1 && kingCounts[BLACK] === 2))
+  );
+}
+
+function updateTwoKingsVsOneCounter() {
+  if (isTwoKingsVsOneKingEndgame()) {
+    state.twoKingsVsOneHalfMoves += 1;
+  } else {
+    state.twoKingsVsOneHalfMoves = 0;
   }
 }
 
@@ -842,6 +878,8 @@ function applyOnlineState(room, color) {
   state.chainFrom = clonePoint(room.chainFrom);
   state.lastMove = (room.lastMove || []).map(clonePoint);
   state.log = cloneLog(room.log || []);
+  state.draw = Boolean(room.draw);
+  state.twoKingsVsOneHalfMoves = room.twoKingsVsOneHalfMoves || 0;
   state.selected = null;
   state.legalMoves = [];
   state.busy = false;
