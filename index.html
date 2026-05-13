@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="pageTitle">Russian Checkers</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <main class="shell">
@@ -60,9 +60,9 @@
         <div class="control-group">
           <label for="modeSelect" data-i18n="modeLabel">Mode</label>
           <select id="modeSelect">
-            <option value="human" data-i18n="modeHuman">2 players</option>
-            <option value="computer" selected data-i18n="modeComputer">1 vs computer</option>
-            <option value="online" data-i18n="modeOnline">Online</option>
+            <option value="human" data-i18n="modeHuman">Local two-player</option>
+            <option value="computer" selected data-i18n="modeComputer">Play vs computer</option>
+            <option value="online" data-i18n="modeOnline">Online match</option>
           </select>
         </div>
 
@@ -89,6 +89,12 @@
             <button id="createRoomBtn" type="button" data-i18n="createRoom">Create room</button>
             <div class="join-row">
               <input id="roomCodeInput" type="text" maxlength="5" autocomplete="off" data-i18n-placeholder="roomCodePlaceholder" placeholder="Room code" />
+              <button id="copyRoomBtn" type="button" class="secondary icon-button" aria-label="Copy room code" title="Copy room code" data-i18n-aria="copyRoomCode" data-i18n-title="copyRoomCode">
+                <span aria-hidden="true">⧉</span>
+              </button>
+              <button id="shareRoomBtn" type="button" class="secondary icon-button" aria-label="Share room link" title="Share room link" data-i18n-aria="shareRoomLink" data-i18n-title="shareRoomLink">
+                <span aria-hidden="true">↗</span>
+              </button>
               <button id="joinRoomBtn" type="button" class="secondary" data-i18n="joinRoom">Join</button>
             </div>
           </div>
@@ -143,10 +149,10 @@
       </section>
     </div>
 
-    <script src="./i18n/en.js"></script>
-    <script src="./i18n/ru.js"></script>
-    <script src="./i18n/tr.js"></script>
-    <script src="./config.js"></script>
-    <script src="./app.js"></script>
+    <script src="./i18n/en.js?v=3"></script>
+    <script src="./i18n/ru.js?v=3"></script>
+    <script src="./i18n/tr.js?v=3"></script>
+    <script src="./config.js?v=3"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>

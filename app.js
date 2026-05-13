@@ -1,6 +1,7 @@
 const SIZE = 8;
 const WHITE = "white";
 const BLACK = "black";
+const PREFERENCES_KEY = "russian-checkers-preferences";
 const directions = [
   [-1, -1],
   [-1, 1],
@@ -27,6 +28,8 @@ const state = {
   busy: false,
   history: [],
   animation: null,
+  positionHistory: [],
+  draw: false,
   online: {
     socket: null,
     roomId: "",
@@ -60,6 +63,8 @@ const soundToggle = document.querySelector("#soundToggle");
 const undoBtn = document.querySelector("#undoBtn");
 const onlinePanel = document.querySelector("#onlinePanel");
 const createRoomBtn = document.querySelector("#createRoomBtn");
+const copyRoomBtn = document.querySelector("#copyRoomBtn");
+const shareRoomBtn = document.querySelector("#shareRoomBtn");
 const joinRoomBtn = document.querySelector("#joinRoomBtn");
 const roomCodeInput = document.querySelector("#roomCodeInput");
 const onlineStatus = document.querySelector("#onlineStatus");
@@ -70,6 +75,55 @@ const playAgainBtn = document.querySelector("#playAgainBtn");
 const copyrightYear = document.querySelector("#copyrightYear");
 
 copyrightYear.textContent = new Date().getFullYear();
+
+function loadPreferences() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFERENCES_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function savePreferences() {
+  const preferences = {
+    language: state.language,
+    mode: state.mode,
+    level: state.level,
+    playerColor: state.playerColor,
+    flipped: state.flipped,
+    boardStyle: state.boardStyle,
+    soundEnabled: state.soundEnabled,
+  };
+  localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+}
+
+function applyPreferences() {
+  const preferences = loadPreferences();
+  const validModes = ["human", "computer", "online"];
+  const validLevels = ["easy", "medium", "hard", "extra-hard"];
+  const validColors = [WHITE, BLACK];
+  const validLanguages = Object.keys(translations);
+  const validStyles = ["classic", "tournament", "midnight", "porcelain"];
+
+  if (validLanguages.includes(preferences.language)) state.language = preferences.language;
+  if (validModes.includes(preferences.mode)) state.mode = preferences.mode;
+  if (validLevels.includes(preferences.level)) state.level = preferences.level;
+  if (validColors.includes(preferences.playerColor)) state.playerColor = preferences.playerColor;
+  if (validStyles.includes(preferences.boardStyle)) state.boardStyle = preferences.boardStyle;
+  if (typeof preferences.soundEnabled === "boolean") state.soundEnabled = preferences.soundEnabled;
+  if (typeof preferences.flipped === "boolean") {
+    state.flipped = preferences.flipped;
+  } else if (state.mode === "computer") {
+    state.flipped = state.playerColor === BLACK;
+  }
+
+  languageSelect.value = state.language;
+  modeSelect.value = state.mode;
+  sideSelect.value = state.playerColor;
+  levelSelect.value = state.level;
+  styleSelect.value = state.boardStyle;
+  soundToggle.checked = state.soundEnabled;
+}
 
 function t(key, params = {}) {
   const dictionary = translations[state.language] || translations.en;
@@ -99,6 +153,10 @@ function applyTranslations() {
 
   document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
     element.setAttribute("placeholder", t(element.dataset.i18nPlaceholder));
+  });
+
+  document.querySelectorAll("[data-i18n-title]").forEach((element) => {
+    element.setAttribute("title", t(element.dataset.i18nTitle));
   });
 }
 
@@ -136,9 +194,28 @@ function resetGame() {
   state.busy = false;
   state.history = [];
   state.animation = null;
+  state.positionHistory = [positionKey()];
+  state.draw = false;
   state.log = [];
   render();
   if (isComputerTurn()) scheduleComputerMove();
+}
+
+function initializeGame() {
+  const roomFromUrl = new URLSearchParams(window.location.search).get("room");
+  if (roomFromUrl) {
+    state.mode = "online";
+    modeSelect.value = "online";
+    render();
+    connectOnline("join", roomFromUrl);
+    return;
+  }
+
+  resetGame();
+  if (state.mode === "online") {
+    state.mode = "online";
+    render();
+  }
 }
 
 function resetOnlineLocalState() {
@@ -151,6 +228,8 @@ function resetOnlineLocalState() {
   state.busy = false;
   state.history = [];
   state.animation = null;
+  state.positionHistory = [positionKey()];
+  state.draw = false;
   state.log = [];
 }
 
@@ -180,6 +259,63 @@ function setOnlineStatus(statusKey, statusParams = {}) {
   render();
 }
 
+function getRoomLink() {
+  if (!state.online.roomId) return "";
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", state.online.roomId);
+  return url.toString();
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+async function copyRoomCode() {
+  if (!state.online.roomId) {
+    setOnlineStatus("noRoomToShare");
+    return;
+  }
+  await copyText(state.online.roomId);
+  setOnlineStatus("copiedRoomCode");
+}
+
+async function shareRoomLink() {
+  const roomLink = getRoomLink();
+  if (!roomLink) {
+    setOnlineStatus("noRoomToShare");
+    return;
+  }
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: document.title,
+        text: t("onlineWaiting", { room: state.online.roomId }),
+        url: roomLink,
+      });
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+
+  await copyText(roomLink);
+  setOnlineStatus("copiedRoomLink");
+}
+
 function cloneBoard(board) {
   return board.map((row) => row.map((piece) => (piece ? { ...piece } : null)));
 }
@@ -201,6 +337,8 @@ function createSnapshot(source = "player") {
     legalMoves: state.legalMoves.map(cloneMove),
     chainFrom: clonePoint(state.chainFrom),
     lastMove: state.lastMove.map(clonePoint),
+    positionHistory: [...state.positionHistory],
+    draw: state.draw,
     log: cloneLog(state.log),
   };
 }
@@ -212,6 +350,8 @@ function restoreSnapshot(snapshot) {
   state.legalMoves = snapshot.legalMoves.map(cloneMove);
   state.chainFrom = clonePoint(snapshot.chainFrom);
   state.lastMove = snapshot.lastMove.map(clonePoint);
+  state.positionHistory = [...(snapshot.positionHistory || [positionKey()])];
+  state.draw = Boolean(snapshot.draw);
   state.log = cloneLog(snapshot.log);
   state.animation = null;
 }
@@ -226,6 +366,41 @@ function cloneMove(move) {
 
 function coord({ row, col }) {
   return `${String.fromCharCode(97 + col)}${SIZE - row}`;
+}
+
+function squareKey({ row, col }) {
+  return `${row},${col}`;
+}
+
+function positionKey(board = state.board, turn = state.turn, chainFrom = state.chainFrom) {
+  const pieces = [];
+  for (let row = 0; row < SIZE; row += 1) {
+    for (let col = 0; col < SIZE; col += 1) {
+      const piece = board[row][col];
+      if (piece) pieces.push(`${row}${col}${piece.color[0]}${piece.king ? "K" : "M"}`);
+    }
+  }
+  const chain = chainFrom ? `${chainFrom.row}${chainFrom.col}` : "-";
+  return `${turn}|${chain}|${pieces.join(",")}`;
+}
+
+function countPositionOccurrences(key) {
+  return state.positionHistory.filter((position) => position === key).length;
+}
+
+function recordCurrentPosition() {
+  const key = positionKey();
+  state.positionHistory.push(key);
+  if (countPositionOccurrences(key) >= 3 || hasInsufficientWinningMaterial()) {
+    state.draw = true;
+  }
+}
+
+function hasInsufficientWinningMaterial() {
+  const pieces = state.board.flat().filter(Boolean);
+  if (pieces.length !== 2 || pieces.some((piece) => !piece.king)) return false;
+  const colors = new Set(pieces.map((piece) => piece.color));
+  return colors.size === 2 && !getAllMoves(state.board, state.turn, state.chainFrom).some((move) => move.captures.length);
 }
 
 function sameSquare(a, b) {
@@ -421,8 +596,9 @@ function makeMove(move, source = "player") {
 
   state.chainFrom = null;
   state.turn = opponent(state.turn);
+  recordCurrentPosition();
   render();
-  if (source !== "computer" && isComputerTurn()) scheduleComputerMove();
+  if (!state.draw && source !== "computer" && isComputerTurn()) scheduleComputerMove();
 }
 
 function logMove(color, wasKing, move, continues) {
@@ -463,7 +639,7 @@ function playTone(ctx, start, frequency, duration, type = "sine", volume = 0.08)
   oscillator.stop(start + duration + 0.02);
 }
 
-function playNoiseClick(ctx, start, duration = 0.045, volume = 0.04) {
+function playNoiseClick(ctx, start, duration = 0.045, volume = 0.04, filterType = "highpass", frequency = 850) {
   const sampleCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
   const buffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
   const data = buffer.getChannelData(0);
@@ -474,8 +650,8 @@ function playNoiseClick(ctx, start, duration = 0.045, volume = 0.04) {
   const noise = ctx.createBufferSource();
   const filter = ctx.createBiquadFilter();
   const gain = ctx.createGain();
-  filter.type = "highpass";
-  filter.frequency.setValueAtTime(850, start);
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(frequency, start);
   gain.gain.setValueAtTime(volume, start);
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
   noise.buffer = buffer;
@@ -504,9 +680,10 @@ function playMoveSound({ capture, promote, win }) {
   }
 
   if (capture) {
-    playTone(ctx, now, 260, 0.055, "triangle", 0.055);
-    playNoiseClick(ctx, now + 0.018, 0.042, 0.035);
-    playTone(ctx, now + 0.055, 390, 0.07, "sine", 0.035);
+    playNoiseClick(ctx, now, 0.026, 0.032, "highpass", 1600);
+    playTone(ctx, now + 0.012, 520, 0.045, "triangle", 0.035);
+    playTone(ctx, now + 0.038, 150, 0.12, "sine", 0.072);
+    playNoiseClick(ctx, now + 0.045, 0.075, 0.022, "lowpass", 620);
     return;
   }
 
@@ -669,6 +846,7 @@ function applyOnlineState(room, color) {
 
   state.online.statusKey = state.online.ready ? "onlineReady" : "onlineWaiting";
   state.online.statusParams = { room: room.id, color: colorName(color) };
+  roomCodeInput.value = room.id;
   render();
 }
 
@@ -685,14 +863,26 @@ function chooseComputerMove() {
   const color = computerColor();
   const moves = getAllMoves(state.board, color, state.chainFrom);
   if (!moves.length) return null;
-  if (state.level === "easy") return randomMove(moves);
-  if (state.level === "medium") return chooseByHeuristic(state.board, moves, color);
-  if (state.level === "hard") return chooseSearchMove(moves, 4, color);
-  return chooseSearchMove(moves, 6, color);
+  const candidates = preferFreshPositions(moves, color);
+  if (state.level === "easy") return randomMove(candidates);
+  if (state.level === "medium") return chooseByHeuristic(state.board, candidates, color);
+  if (state.level === "hard") return chooseSearchMove(candidates, 4, color);
+  return chooseSearchMove(candidates, 6, color);
 }
 
 function randomMove(moves) {
   return moves[Math.floor(Math.random() * moves.length)];
+}
+
+function preferFreshPositions(moves, color) {
+  const fresh = moves.filter((move) => {
+    const next = applyMove(state.board, move);
+    const chain = move.captures.length ? getCaptureMovesForPiece(next, move.to.row, move.to.col) : [];
+    const nextTurn = chain.length ? color : opponent(color);
+    const nextChainFrom = chain.length ? move.to : null;
+    return countPositionOccurrences(positionKey(next, nextTurn, nextChainFrom)) === 0;
+  });
+  return fresh.length ? fresh : moves;
 }
 
 function chooseByHeuristic(board, moves, color) {
@@ -792,29 +982,36 @@ function evaluateBoard(board, perspective = BLACK) {
   return score;
 }
 
-function getWinner() {
-  const whitePieces = countPieces(WHITE);
-  const blackPieces = countPieces(BLACK);
+function getWinner(pieceCounts = getPieceCounts()) {
+  if (state.draw) return null;
+  const whitePieces = pieceCounts[WHITE];
+  const blackPieces = pieceCounts[BLACK];
   if (!whitePieces) return BLACK;
   if (!blackPieces) return WHITE;
   if (!getAllMoves(state.board, state.turn, state.chainFrom).length) return opponent(state.turn);
   return null;
 }
 
-function countPieces(color) {
-  return state.board.flat().filter((piece) => piece?.color === color).length;
+function getPieceCounts(board = state.board) {
+  const counts = { [WHITE]: 0, [BLACK]: 0 };
+  for (const row of board) {
+    for (const piece of row) {
+      if (piece) counts[piece.color] += 1;
+    }
+  }
+  return counts;
 }
 
-function renderResultOverlay(winner) {
-  if (!winner) {
+function renderResultOverlay(winner, draw, pieceCounts) {
+  if (!winner && !draw) {
     resultOverlay.hidden = true;
     return;
   }
 
-  resultTitle.textContent = t("resultTitle", { color: colorName(winner) });
+  resultTitle.textContent = draw ? t("drawTitle") : t("resultTitle", { color: colorName(winner) });
   resultScore.textContent = t("finalScore", {
-    white: countPieces(WHITE),
-    black: countPieces(BLACK),
+    white: pieceCounts[WHITE],
+    black: pieceCounts[BLACK],
   });
   resultOverlay.hidden = false;
 }
@@ -832,14 +1029,19 @@ function render(messageKey = "", messageParams = {}) {
   sideControl.hidden = state.mode !== "computer";
   levelControl.hidden = state.mode !== "computer";
   onlinePanel.hidden = state.mode !== "online";
-  const winner = getWinner();
-  const moves = winner ? [] : getAllMoves(state.board, state.turn, state.chainFrom);
+  const pieceCounts = getPieceCounts();
+  const winner = getWinner(pieceCounts);
+  const draw = state.draw;
+  const moves = winner || draw ? [] : getAllMoves(state.board, state.turn, state.chainFrom);
   const forcedCapture = moves.some((move) => move.captures.length);
   const selectedMoves = state.selected
     ? moves.filter((move) => sameSquare(move.from, state.selected))
     : state.legalMoves;
+  const lastMoveSquares = new Set(state.lastMove.map(squareKey));
+  const legalLandingSquares = new Set(selectedMoves.map((move) => squareKey(move.to)));
+  const movableSquares = new Set(moves.map((move) => squareKey(move.from)));
+  const capturedBySquare = new Map((state.animation?.captures || []).map((capture) => [squareKey(capture), capture]));
 
-  boardEl.innerHTML = "";
   const rows = [...Array(SIZE).keys()];
   const cols = [...Array(SIZE).keys()];
   if (state.flipped) {
@@ -847,8 +1049,11 @@ function render(messageKey = "", messageParams = {}) {
     cols.reverse();
   }
 
+  boardEl.innerHTML = "";
+  const boardFragment = document.createDocumentFragment();
   for (const row of rows) {
     for (const col of cols) {
+      const key = `${row},${col}`;
       const square = document.createElement("button");
       square.type = "button";
       square.className = `square ${isDark(row, col) ? "dark" : "light"}`;
@@ -858,9 +1063,9 @@ function render(messageKey = "", messageParams = {}) {
       square.dataset.row = row;
       square.dataset.col = col;
 
-      if (state.lastMove.some((point) => sameSquare(point, { row, col }))) square.classList.add("last");
+      if (lastMoveSquares.has(key)) square.classList.add("last");
       if (sameSquare(state.selected, { row, col })) square.classList.add("selected");
-      if (selectedMoves.some((move) => sameSquare(move.to, { row, col }))) square.classList.add("legal");
+      if (legalLandingSquares.has(key)) square.classList.add("legal");
 
       const piece = state.board[row][col];
       if (piece) {
@@ -872,12 +1077,12 @@ function render(messageKey = "", messageParams = {}) {
           if (state.animation.promote) pieceEl.classList.add("crown-animate");
         }
         square.append(pieceEl);
-        if (piece.color === state.turn && moves.some((move) => sameSquare(move.from, { row, col }))) {
+        if (piece.color === state.turn && movableSquares.has(key)) {
           square.classList.add("selectable");
         }
       }
 
-      const captured = state.animation?.captures.find((capture) => sameSquare(capture, { row, col }));
+      const captured = capturedBySquare.get(key);
       if (captured?.piece) {
         const capturedEl = document.createElement("span");
         capturedEl.className = `piece ${captured.piece.color}${captured.piece.king ? " king" : ""} capture-animate`;
@@ -886,17 +1091,23 @@ function render(messageKey = "", messageParams = {}) {
 
       square.addEventListener("mousedown", (event) => event.preventDefault());
       square.addEventListener("click", () => handleSquareClick(row, col));
-      boardEl.append(square);
+      boardFragment.append(square);
     }
   }
+  boardEl.append(boardFragment);
 
-  whiteCount.textContent = countPieces(WHITE);
-  blackCount.textContent = countPieces(BLACK);
+  whiteCount.textContent = pieceCounts[WHITE];
+  blackCount.textContent = pieceCounts[BLACK];
   undoBtn.disabled = state.mode === "online" || !state.history.length;
+  copyRoomBtn.disabled = !state.online.roomId;
+  shareRoomBtn.disabled = !state.online.roomId;
   turnPill.className = `turn-pill ${state.turn}`;
   turnPill.textContent = t("turn", { color: colorName(state.turn) });
 
-  if (winner) {
+  if (draw) {
+    statusText.textContent = t("draw");
+    hintText.textContent = t("drawHint");
+  } else if (winner) {
     statusText.textContent = t("winner", { color: colorName(winner) });
     hintText.textContent = t("winnerHint");
   } else {
@@ -915,6 +1126,7 @@ function render(messageKey = "", messageParams = {}) {
   }
 
   moveLog.innerHTML = "";
+  const logFragment = document.createDocumentFragment();
   for (const entry of state.log) {
     const item = document.createElement("li");
     item.textContent = t("moveLogEntry", {
@@ -925,10 +1137,11 @@ function render(messageKey = "", messageParams = {}) {
       to: entry.to,
       continues: entry.continues ? " +" : "",
     });
-    moveLog.append(item);
+    logFragment.append(item);
   }
+  moveLog.append(logFragment);
 
-  renderResultOverlay(winner);
+  renderResultOverlay(winner, draw, pieceCounts);
   onlineStatus.textContent = t(state.online.statusKey, state.online.statusParams);
 
   if (state.animation) {
@@ -944,6 +1157,7 @@ function render(messageKey = "", messageParams = {}) {
 languageSelect.addEventListener("change", () => {
   unlockAudio();
   state.language = languageSelect.value;
+  savePreferences();
   render();
 });
 
@@ -951,6 +1165,7 @@ modeSelect.addEventListener("change", () => {
   unlockAudio();
   if (state.mode === "online" && modeSelect.value !== "online") closeOnlineSocket();
   state.mode = modeSelect.value;
+  savePreferences();
   resetGame();
 });
 
@@ -958,24 +1173,28 @@ sideSelect.addEventListener("change", () => {
   unlockAudio();
   state.playerColor = sideSelect.value;
   state.flipped = state.playerColor === BLACK;
+  savePreferences();
   resetGame();
 });
 
 levelSelect.addEventListener("change", () => {
   unlockAudio();
   state.level = levelSelect.value;
+  savePreferences();
   render("levelChanged");
 });
 
 styleSelect.addEventListener("change", () => {
   unlockAudio();
   state.boardStyle = styleSelect.value;
+  savePreferences();
   render("styleChanged");
 });
 
 soundToggle.addEventListener("change", () => {
   state.soundEnabled = soundToggle.checked;
   unlockAudio();
+  savePreferences();
   render(state.soundEnabled ? "soundOn" : "soundOff");
 });
 
@@ -995,11 +1214,19 @@ createRoomBtn.addEventListener("click", () => {
   unlockAudio();
   connectOnline("create");
 });
+copyRoomBtn.addEventListener("click", () => {
+  unlockAudio();
+  copyRoomCode().catch(() => setOnlineStatus("onlineError", { message: t("copyFailed") }));
+});
+shareRoomBtn.addEventListener("click", () => {
+  unlockAudio();
+  shareRoomLink().catch(() => setOnlineStatus("onlineError", { message: t("shareFailed") }));
+});
 joinRoomBtn.addEventListener("click", () => {
   unlockAudio();
   const roomId = roomCodeInput.value.trim().toUpperCase();
   if (!roomId) {
-    setOnlineStatus("onlineError", { message: t("roomCodePlaceholder") });
+    setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
     return;
   }
   connectOnline("join", roomId);
@@ -1010,7 +1237,9 @@ roomCodeInput.addEventListener("input", () => {
 document.querySelector("#flipBtn").addEventListener("click", () => {
   unlockAudio();
   state.flipped = !state.flipped;
+  savePreferences();
   render("boardFlipped");
 });
 
-resetGame();
+applyPreferences();
+initializeGame();
