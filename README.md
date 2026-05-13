@@ -1,56 +1,38 @@
 # Russian Checkers
 
-A modern browser-based Russian checkers game with local two-player mode, computer play, difficulty levels, board themes, sounds, undo, animations, language support, and a game result overlay.
+A browser-based Russian checkers game with local play, computer play, and online rooms.
 
 ## Features
 
-- Russian draughts rules
-- 2-player local mode
-- 1 vs computer mode
-- Online room mode with a WebSocket server
-- Player side selection
-- Difficulty levels: Beginner, Club Player, Master, Grandmaster
-- English, Russian, and Turkish language support
-- Board style selector
-- Move sounds with toggle
-- Undo support
-- Move, capture, and crowning animations
-- Win overlay with final score
+- Russian draughts rules with forced captures, capture chains, flying kings, and crowning
+- Game modes: Local two-player, Play vs computer, Online match
+- Computer levels: Beginner, Club Player, Master, Grandmaster
+- Online rooms with room codes, copy code, and shareable links
+- English, Russian, and Turkish translations
+- Board themes: Classic wood, Tournament green, Midnight glass, Porcelain blue
+- Turn indicator rail that follows the board theme and board orientation
+- Move sounds, undo, board flip, move log, and animations
+- Win and draw overlays with final score
+- Draw handling for repeated positions, 1 king vs 1 king, and 2 kings vs 1 king after 10 full moves
+- Saved local preferences for mode, side, level, language, style, board flip, and sounds
 
 ## Run Locally
 
-This is a static app. You can run it with any local static server:
+The frontend is static:
 
 ```bash
 python3 -m http.server 4173
 ```
 
-Then open:
+Open:
 
 ```text
 http://localhost:4173/
 ```
 
-## Deploy To GitHub Pages
+## Online Server
 
-1. Push this project to a GitHub repository.
-2. Open the repository settings.
-3. Go to `Pages`.
-4. Choose `Deploy from a branch`.
-5. Select the `main` branch and `/root` folder.
-6. Save.
-
-GitHub Pages will publish the app at a URL like:
-
-```text
-https://your-username.github.io/your-repo-name/
-```
-
-## Online Play Server
-
-The online mode uses a small WebSocket server in `server/`. Deploy the frontend to GitHub Pages and deploy `server/` to Render as a Web Service.
-
-For local server testing:
+Online mode uses the WebSocket server in `server/`.
 
 ```bash
 cd server
@@ -58,25 +40,31 @@ npm install
 npm start
 ```
 
-The local WebSocket URL is already set in [config.js](./config.js):
+For local online testing, set `config.js` to:
 
 ```js
 WS_URL: "ws://localhost:10000"
 ```
 
-After deploying to Render, update `config.js` to your Render WebSocket URL:
+For production, deploy `server/` to a WebSocket-capable host and set `config.js` to that URL, for example:
 
 ```js
 WS_URL: "wss://your-checkers-server.onrender.com"
 ```
 
-On Render, use:
+## Deploy
+
+The frontend can be hosted on GitHub Pages.
+
+On Render, the server settings are:
 
 ```text
 Root Directory: server
 Build Command: npm install
 Start Command: npm start
 ```
+
+Note: free hosting services may sleep when inactive. Use an always-on plan if online play needs to be available immediately.
 
 ## Project Structure
 
@@ -85,14 +73,9 @@ Start Command: npm start
 ├── app.js
 ├── index.html
 ├── styles.css
+├── config.js
 ├── i18n/
-│   ├── en.js
-│   ├── ru.js
-│   └── tr.js
 ├── shared/
-│   └── rules.js
 ├── server/
-│   ├── index.js
-│   └── package.json
 └── README.md
 ```
