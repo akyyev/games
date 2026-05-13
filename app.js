@@ -1043,6 +1043,7 @@ function getMoveAnimationStyle(from, to) {
 function render(messageKey = "", messageParams = {}) {
   applyTranslations();
   document.body.dataset.boardStyle = state.boardStyle;
+  document.body.dataset.flipped = state.flipped ? "true" : "false";
   sideControl.hidden = state.mode !== "computer";
   levelControl.hidden = state.mode !== "computer";
   onlinePanel.hidden = state.mode !== "online";

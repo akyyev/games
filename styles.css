@@ -233,7 +233,7 @@ h1 {
 }
 
 body[data-turn="white"] .turn-lane span {
-  background: linear-gradient(to bottom, var(--turn-lane-primary) 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 40%, #101216 100%);
+  background: linear-gradient(to bottom, #101216 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 60%, var(--turn-lane-primary) 100%);
   box-shadow:
     0 0 0.55rem rgba(122, 200, 109, 0.42),
     0 0 1.2rem rgba(122, 200, 109, 0.18);
@@ -241,11 +241,19 @@ body[data-turn="white"] .turn-lane span {
 }
 
 body[data-turn="black"] .turn-lane span {
-  background: linear-gradient(to bottom, #101216 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 60%, var(--turn-lane-primary) 100%);
+  background: linear-gradient(to bottom, var(--turn-lane-primary) 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 40%, #101216 100%);
   box-shadow:
     0 0 0.55rem rgba(122, 200, 109, 0.38),
     0 0 1.2rem rgba(122, 200, 109, 0.16);
   opacity: 0.86;
+}
+
+body[data-flipped="true"][data-turn="white"] .turn-lane span {
+  background: linear-gradient(to bottom, var(--turn-lane-primary) 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 40%, #101216 100%);
+}
+
+body[data-flipped="true"][data-turn="black"] .turn-lane span {
+  background: linear-gradient(to bottom, #101216 0%, color-mix(in srgb, var(--turn-lane-primary), transparent 42%) 60%, var(--turn-lane-primary) 100%);
 }
 
 body[data-turn-owner="player"] .turn-lane span {
