@@ -66,6 +66,8 @@ window.I18N.tr = {
   closeResult: "Sonucu kapat",
   playAgain: "Tekrar oyna",
   resultTitle: "{color} kazandı",
+  youWonTitle: "Harika galibiyet!",
+  youLostTitle: "Güzel maçtı",
   drawTitle: "Berabere",
   finalScore: "Final skoru: Beyaz {white} - Siyah {black}",
   createRoom: "Oda oluştur",

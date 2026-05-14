@@ -66,6 +66,8 @@ window.I18N.en = {
   closeResult: "Close result",
   playAgain: "Play again",
   resultTitle: "{color} wins",
+  youWonTitle: "Great win!",
+  youLostTitle: "Good game",
   drawTitle: "Draw",
   finalScore: "Final score: White {white} - Black {black}",
   createRoom: "Create room",

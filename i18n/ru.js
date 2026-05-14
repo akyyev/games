@@ -66,6 +66,8 @@ window.I18N.ru = {
   closeResult: "Закрыть результат",
   playAgain: "Играть снова",
   resultTitle: "Победа: {color}",
+  youWonTitle: "Отличная победа!",
+  youLostTitle: "Хорошая партия",
   drawTitle: "Ничья",
   finalScore: "Итоговый счет: Белые {white} - Черные {black}",
   createRoom: "Создать комнату",

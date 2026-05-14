@@ -1097,7 +1097,13 @@ function renderResultOverlay(winner, draw, pieceCounts) {
     return;
   }
 
-  resultTitle.textContent = draw ? t("drawTitle") : t("resultTitle", { color: colorName(winner) });
+  if (draw) {
+    resultTitle.textContent = t("drawTitle");
+  } else if (state.mode === "computer" || state.mode === "online") {
+    resultTitle.textContent = t(winner === state.playerColor ? "youWonTitle" : "youLostTitle");
+  } else {
+    resultTitle.textContent = t("resultTitle", { color: colorName(winner) });
+  }
   resultScore.textContent = t("finalScore", {
     white: pieceCounts[WHITE],
     black: pieceCounts[BLACK],
