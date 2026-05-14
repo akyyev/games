@@ -49,40 +49,89 @@
           <p id="hintText"></p>
         </div>
 
-        <div class="control-group">
-          <label for="languageSelect" data-i18n="languageLabel">Language</label>
-          <select id="languageSelect">
-            <option value="en" selected data-i18n="languageEnglish">English</option>
-            <option value="ru" data-i18n="languageRussian">Russian</option>
-            <option value="tr" data-i18n="languageTurkish">Turkish</option>
-          </select>
+        <div class="actions">
+          <button id="newGameBtn" type="button" class="icon-button" aria-label="New game" title="New game" data-i18n-aria="newGame" data-i18n-title="newGame">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+              <path d="M21 3v6h-6"></path>
+            </svg>
+          </button>
+          <button id="undoBtn" type="button" class="secondary icon-button" aria-label="Undo" title="Undo" data-i18n-aria="undoMove" data-i18n-title="undoMove">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <path d="M9 14 4 9l5-5"></path>
+              <path d="M4 9h10a6 6 0 0 1 0 12h-2"></path>
+            </svg>
+          </button>
+          <button id="flipBtn" type="button" class="secondary icon-button" aria-label="Flip board" title="Flip board" data-i18n-aria="flipBoard" data-i18n-title="flipBoard">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <path d="M8 7h8"></path>
+              <path d="m13 4 3 3-3 3"></path>
+              <path d="M16 17H8"></path>
+              <path d="m11 14-3 3 3 3"></path>
+            </svg>
+          </button>
+          <label class="secondary icon-button sound-row" for="soundToggle" aria-label="Move sounds" title="Move sounds" data-i18n-aria="soundLabel" data-i18n-title="soundLabel">
+            <input id="soundToggle" type="checkbox" checked />
+            <span class="sound-icon" aria-hidden="true">
+              <svg class="sound-icon-on" viewBox="0 0 24 24" focusable="false">
+                <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
+                <path d="M16 8.5a5 5 0 0 1 0 7"></path>
+                <path d="M18.5 6a8 8 0 0 1 0 12"></path>
+              </svg>
+              <svg class="sound-icon-off" viewBox="0 0 24 24" focusable="false">
+                <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
+                <path d="m16 9 5 5"></path>
+                <path d="m21 9-5 5"></path>
+              </svg>
+            </span>
+          </label>
         </div>
 
-        <div class="control-group">
-          <label for="modeSelect" data-i18n="modeLabel">Mode</label>
-          <select id="modeSelect">
-            <option value="human" data-i18n="modeHuman">Local two-player</option>
-            <option value="computer" selected data-i18n="modeComputer">Play vs computer</option>
-            <option value="online" data-i18n="modeOnline">Online match</option>
-          </select>
-        </div>
+        <div class="control-grid">
+          <div class="control-group">
+            <label for="languageSelect" data-i18n="languageLabel">Language</label>
+            <select id="languageSelect">
+              <option value="en" selected data-i18n="languageEnglish">English</option>
+              <option value="ru" data-i18n="languageRussian">Russian</option>
+              <option value="tr" data-i18n="languageTurkish">Turkish</option>
+            </select>
+          </div>
 
-        <div class="control-group" id="sideControl">
-          <label for="sideSelect" data-i18n="sideLabel">Your side</label>
-          <select id="sideSelect">
-            <option value="white" selected data-i18n="sideWhite">White</option>
-            <option value="black" data-i18n="sideBlack">Black</option>
-          </select>
-        </div>
+          <div class="control-group" id="sideControl">
+            <label for="sideSelect" data-i18n="sideLabel">Your side</label>
+            <select id="sideSelect">
+              <option value="white" selected data-i18n="sideWhite">White</option>
+              <option value="black" data-i18n="sideBlack">Black</option>
+            </select>
+          </div>
 
-        <div class="control-group" id="levelControl">
-          <label for="levelSelect" data-i18n="levelLabel">Computer level</label>
-          <select id="levelSelect">
-            <option value="easy" data-i18n="levelEasy">Beginner</option>
-            <option value="medium" selected data-i18n="levelMedium">Club Player</option>
-            <option value="hard" data-i18n="levelHard">Master</option>
-            <option value="extra-hard" data-i18n="levelExtraHard">Grandmaster</option>
-          </select>
+          <div class="control-group" id="modeControl">
+            <label for="modeSelect" data-i18n="modeLabel">Mode</label>
+            <select id="modeSelect">
+              <option value="human" data-i18n="modeHuman">Local two-player</option>
+              <option value="computer" selected data-i18n="modeComputer">Play vs computer</option>
+              <option value="online" data-i18n="modeOnline">Online match</option>
+            </select>
+          </div>
+
+          <div class="control-group" id="levelControl">
+            <label for="levelSelect" data-i18n="levelLabel">Computer level</label>
+            <select id="levelSelect" class="visually-hidden-control" tabindex="-1" aria-hidden="true">
+              <option value="easy" data-i18n="levelEasy">Beginner</option>
+              <option value="medium" selected data-i18n="levelMedium">Club Player</option>
+              <option value="hard" data-i18n="levelHard">Master</option>
+              <option value="extra-hard" data-i18n="levelExtraHard">Grandmaster</option>
+            </select>
+            <button id="levelCycleBtn" type="button" class="level-cycle" aria-label="Computer level" title="Computer level" data-i18n-aria="levelLabel" data-i18n-title="levelLabel">
+              <span id="levelCycleLabel" class="level-cycle-label">Club Player</span>
+              <span class="strength-bars" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </button>
+          </div>
         </div>
 
         <div id="onlinePanel" class="online-panel" hidden>
@@ -102,7 +151,7 @@
           <p id="onlineStatus" class="online-status"></p>
         </div>
 
-        <div class="control-group">
+        <div class="control-group control-group-wide">
           <label for="styleSelect" data-i18n="styleLabel">Board style</label>
           <select id="styleSelect">
             <option value="classic" selected data-i18n="styleClassic">Classic wood</option>
@@ -110,17 +159,6 @@
             <option value="midnight" data-i18n="styleMidnight">Midnight glass</option>
             <option value="porcelain" data-i18n="stylePorcelain">Porcelain blue</option>
           </select>
-        </div>
-
-        <label class="toggle-row" for="soundToggle">
-          <span data-i18n="soundLabel">Move sounds</span>
-          <input id="soundToggle" type="checkbox" checked />
-        </label>
-
-        <div class="actions">
-          <button id="newGameBtn" type="button" data-i18n="newGame">New game</button>
-          <button id="undoBtn" type="button" class="secondary" data-i18n="undoMove">Undo</button>
-          <button id="flipBtn" type="button" class="secondary" data-i18n="flipBoard">Flip board</button>
         </div>
 
         <div class="rules">
@@ -143,6 +181,9 @@
 
     <div id="resultOverlay" class="result-overlay" hidden>
       <section class="result-modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+        <button id="closeResultBtn" type="button" class="result-close" aria-label="Close result" data-i18n-aria="closeResult">
+          <span aria-hidden="true">✕</span>
+        </button>
         <p class="eyebrow" data-i18n="gameOver">Game over</p>
         <h2 id="resultTitle"></h2>
         <p id="resultScore" class="result-score"></p>

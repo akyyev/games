@@ -59,6 +59,8 @@ const sideControl = document.querySelector("#sideControl");
 const sideSelect = document.querySelector("#sideSelect");
 const levelControl = document.querySelector("#levelControl");
 const levelSelect = document.querySelector("#levelSelect");
+const levelCycleBtn = document.querySelector("#levelCycleBtn");
+const levelCycleLabel = document.querySelector("#levelCycleLabel");
 const styleSelect = document.querySelector("#styleSelect");
 const soundToggle = document.querySelector("#soundToggle");
 const undoBtn = document.querySelector("#undoBtn");
@@ -72,8 +74,10 @@ const onlineStatus = document.querySelector("#onlineStatus");
 const resultOverlay = document.querySelector("#resultOverlay");
 const resultTitle = document.querySelector("#resultTitle");
 const resultScore = document.querySelector("#resultScore");
+const closeResultBtn = document.querySelector("#closeResultBtn");
 const playAgainBtn = document.querySelector("#playAgainBtn");
 const copyrightYear = document.querySelector("#copyrightYear");
+const levelOrder = ["easy", "medium", "hard", "extra-hard"];
 
 copyrightYear.textContent = new Date().getFullYear();
 
@@ -124,6 +128,7 @@ function applyPreferences() {
   levelSelect.value = state.level;
   styleSelect.value = state.boardStyle;
   soundToggle.checked = state.soundEnabled;
+  syncLevelControl();
 }
 
 function t(key, params = {}) {
@@ -137,6 +142,34 @@ function t(key, params = {}) {
 
 function colorName(color) {
   return t(color);
+}
+
+function getLevelLabelKey(level = state.level) {
+  return {
+    easy: "levelEasy",
+    medium: "levelMedium",
+    hard: "levelHard",
+    "extra-hard": "levelExtraHard",
+  }[level] || "levelMedium";
+}
+
+function syncLevelControl() {
+  const levelKey = getLevelLabelKey();
+  const levelLabel = t(levelKey);
+  const accessibleLabel = `${t("levelLabel")}: ${levelLabel}`;
+  levelSelect.value = state.level;
+  levelCycleLabel.textContent = levelLabel;
+  levelCycleBtn.dataset.level = state.level;
+  levelCycleBtn.setAttribute("aria-label", accessibleLabel);
+  levelCycleBtn.setAttribute("title", accessibleLabel);
+}
+
+function changeLevel(level) {
+  if (!levelOrder.includes(level)) return;
+  state.level = level;
+  syncLevelControl();
+  savePreferences();
+  render("levelChanged");
 }
 
 function applyTranslations() {
@@ -1072,6 +1105,10 @@ function renderResultOverlay(winner, draw, pieceCounts) {
   resultOverlay.hidden = false;
 }
 
+function closeResultOverlay() {
+  resultOverlay.hidden = true;
+}
+
 function getMoveAnimationStyle(from, to) {
   const direction = state.flipped ? -1 : 1;
   const dx = (from.col - to.col) * direction * 1.3889;
@@ -1081,6 +1118,7 @@ function getMoveAnimationStyle(from, to) {
 
 function render(messageKey = "", messageParams = {}) {
   applyTranslations();
+  syncLevelControl();
   document.body.dataset.boardStyle = state.boardStyle;
   document.body.dataset.flipped = state.flipped ? "true" : "false";
   sideControl.hidden = state.mode !== "computer";
@@ -1250,9 +1288,14 @@ sideSelect.addEventListener("change", () => {
 
 levelSelect.addEventListener("change", () => {
   unlockAudio();
-  state.level = levelSelect.value;
-  savePreferences();
-  render("levelChanged");
+  changeLevel(levelSelect.value);
+});
+
+levelCycleBtn.addEventListener("click", () => {
+  unlockAudio();
+  const currentIndex = levelOrder.indexOf(state.level);
+  const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % levelOrder.length;
+  changeLevel(levelOrder[nextIndex]);
 });
 
 styleSelect.addEventListener("change", () => {
@@ -1280,6 +1323,10 @@ undoBtn.addEventListener("click", () => {
 playAgainBtn.addEventListener("click", () => {
   unlockAudio();
   resetGame();
+});
+closeResultBtn.addEventListener("click", () => {
+  unlockAudio();
+  closeResultOverlay();
 });
 createRoomBtn.addEventListener("click", () => {
   unlockAudio();

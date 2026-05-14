@@ -63,6 +63,7 @@ window.I18N.ru = {
   undone: "Ход отменен.",
   nothingToUndo: "Пока нечего отменять.",
   gameOver: "Игра окончена",
+  closeResult: "Закрыть результат",
   playAgain: "Играть снова",
   resultTitle: "Победа: {color}",
   drawTitle: "Ничья",

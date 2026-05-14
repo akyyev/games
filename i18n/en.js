@@ -63,6 +63,7 @@ window.I18N.en = {
   undone: "Move undone.",
   nothingToUndo: "No move to undo yet.",
   gameOver: "Game over",
+  closeResult: "Close result",
   playAgain: "Play again",
   resultTitle: "{color} wins",
   drawTitle: "Draw",

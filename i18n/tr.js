@@ -63,6 +63,7 @@ window.I18N.tr = {
   undone: "Hamle geri alındı.",
   nothingToUndo: "Henüz geri alınacak hamle yok.",
   gameOver: "Oyun bitti",
+  closeResult: "Sonucu kapat",
   playAgain: "Tekrar oyna",
   resultTitle: "{color} kazandı",
   drawTitle: "Berabere",
