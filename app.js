@@ -38,6 +38,7 @@ const state = {
     ready: false,
     statusKey: "onlineIdle",
     statusParams: {},
+    rematchChoice: null,
   },
   log: [],
 };
@@ -76,6 +77,7 @@ const resultTitle = document.querySelector("#resultTitle");
 const resultScore = document.querySelector("#resultScore");
 const closeResultBtn = document.querySelector("#closeResultBtn");
 const playAgainBtn = document.querySelector("#playAgainBtn");
+const declineRematchBtn = document.querySelector("#declineRematchBtn");
 const copyrightYear = document.querySelector("#copyrightYear");
 const levelOrder = ["easy", "medium", "hard", "extra-hard"];
 
@@ -852,6 +854,7 @@ function closeOnlineSocket() {
   state.online.roomId = "";
   state.online.statusKey = "onlineIdle";
   state.online.statusParams = {};
+  state.online.rematchChoice = null;
 }
 
 function connectOnline(action, roomId = "") {
@@ -884,6 +887,8 @@ function connectOnline(action, roomId = "") {
       setOnlineStatus("onlineError", { message: message.message });
     } else if (message.type === "notice") {
       setOnlineStatus("onlineError", { message: message.message });
+    } else if (message.type === "rematch") {
+      handleRematchStatus(message.status);
     }
   });
 
@@ -935,7 +940,26 @@ function applyOnlineState(room, color) {
 
   state.online.statusKey = state.online.ready ? "onlineReady" : "onlineWaiting";
   state.online.statusParams = { room: room.id, color: colorName(color) };
+  state.online.rematchChoice = null;
   roomCodeInput.value = room.id;
+  render();
+}
+
+function handleRematchStatus(status) {
+  const statusKeys = {
+    waiting: "rematchWaiting",
+    opponentAccepted: "rematchOpponentAccepted",
+    declinedByYou: "rematchDeclinedByYou",
+    declinedByOpponent: "rematchDeclinedByOpponent",
+    started: "rematchStarted",
+  };
+  if (status === "started") {
+    state.online.rematchChoice = "starting";
+    resultOverlay.hidden = true;
+  } else if (status === "declinedByYou" || status === "declinedByOpponent") {
+    state.online.rematchChoice = "closed";
+  }
+  setOnlineStatus(statusKeys[status] || "onlineIdle");
   render();
 }
 
@@ -946,6 +970,18 @@ function sendOnlineMove(move) {
     return;
   }
   socket.send(JSON.stringify({ type: "move", move }));
+}
+
+function sendRematchVote(accept) {
+  const socket = state.online.socket;
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    setOnlineStatus("onlineError", { message: "Not connected." });
+    return;
+  }
+  state.online.rematchChoice = accept ? "yes" : "no";
+  setOnlineStatus(accept ? "rematchWaiting" : "rematchDeclinedByYou");
+  socket.send(JSON.stringify({ type: "rematch", accept }));
+  render();
 }
 
 function chooseComputerMove() {
@@ -1094,6 +1130,15 @@ function getPieceCounts(board = state.board) {
 function renderResultOverlay(winner, draw, pieceCounts) {
   if (!winner && !draw) {
     resultOverlay.hidden = true;
+    declineRematchBtn.hidden = true;
+    playAgainBtn.disabled = false;
+    return;
+  }
+
+  if (state.mode === "online" && state.online.rematchChoice) {
+    resultOverlay.hidden = true;
+    declineRematchBtn.hidden = true;
+    playAgainBtn.disabled = false;
     return;
   }
 
@@ -1108,6 +1153,11 @@ function renderResultOverlay(winner, draw, pieceCounts) {
     white: pieceCounts[WHITE],
     black: pieceCounts[BLACK],
   });
+  const canRematchOnline = state.mode === "online" && state.online.ready;
+  const hasRematchChoice = Boolean(state.online.rematchChoice);
+  declineRematchBtn.hidden = !canRematchOnline;
+  playAgainBtn.disabled = hasRematchChoice;
+  declineRematchBtn.disabled = hasRematchChoice;
   resultOverlay.hidden = false;
 }
 
@@ -1328,7 +1378,15 @@ undoBtn.addEventListener("click", () => {
 });
 playAgainBtn.addEventListener("click", () => {
   unlockAudio();
+  if (state.mode === "online") {
+    sendRematchVote(true);
+    return;
+  }
   resetGame();
+});
+declineRematchBtn.addEventListener("click", () => {
+  unlockAudio();
+  sendRematchVote(false);
 });
 closeResultBtn.addEventListener("click", () => {
   unlockAudio();

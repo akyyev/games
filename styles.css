@@ -895,6 +895,11 @@ button:disabled {
   font-weight: 800;
 }
 
+.result-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
 .result-modal button:not(.result-close) {
   width: 100%;
 }

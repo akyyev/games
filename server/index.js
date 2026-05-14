@@ -39,6 +39,7 @@ function createRoom() {
     log: [],
     draw: false,
     twoKingsVsOneHalfMoves: 0,
+    rematchVotes: new Map(),
     players: new Map(),
     createdAt: Date.now(),
   };
@@ -57,6 +58,7 @@ function serializeRoom(room) {
     log: room.log,
     winner: room.draw ? null : rules.getWinner(room.board, room.turn, room.chainFrom),
     draw: room.draw,
+    rematchVotes: Object.fromEntries(room.rematchVotes),
     players,
   };
 }
@@ -111,6 +113,7 @@ function handleMove(ws, payload) {
   if (!legalMove) return send(ws, { type: "error", message: "Illegal move." });
 
   const piece = room.board[legalMove.from.row][legalMove.from.col];
+  room.rematchVotes.clear();
   room.board = rules.applyMove(room.board, legalMove);
   room.lastMove = [legalMove.from, legalMove.to];
   const continuedCaptures = legalMove.captures.length
@@ -127,6 +130,70 @@ function handleMove(ws, payload) {
   }
 
   syncRoom(room);
+}
+
+function isGameOver(room) {
+  return room.draw || rules.getWinner(room.board, room.turn, room.chainFrom);
+}
+
+function resetRoomForRematch(room) {
+  room.board = rules.createInitialBoard();
+  room.turn = rules.WHITE;
+  room.chainFrom = null;
+  room.lastMove = [];
+  room.log = [];
+  room.draw = false;
+  room.twoKingsVsOneHalfMoves = 0;
+  room.rematchVotes.clear();
+}
+
+function sendRematchStatus(room, voterColor, accepted) {
+  for (const [playerWs, playerColor] of room.players.entries()) {
+    send(playerWs, {
+      type: "rematch",
+      status: accepted
+        ? playerColor === voterColor
+          ? "waiting"
+          : "opponentAccepted"
+        : playerColor === voterColor
+          ? "declinedByYou"
+          : "declinedByOpponent",
+    });
+  }
+}
+
+function handleRematch(ws, payload) {
+  const room = rooms.get(ws.roomId);
+  if (!room) return send(ws, { type: "error", message: "Room not found." });
+  if (!isGameOver(room)) return send(ws, { type: "error", message: "Game is not over." });
+
+  const color = room.players.get(ws);
+  if (!color) return send(ws, { type: "error", message: "Player not found." });
+  if ([...room.rematchVotes.values()].includes("no")) {
+    return send(ws, {
+      type: "rematch",
+      status: room.rematchVotes.get(color) === "no" ? "declinedByYou" : "declinedByOpponent",
+    });
+  }
+
+  const accepted = payload.accept !== false;
+  room.rematchVotes.set(color, accepted ? "yes" : "no");
+
+  if (!accepted) {
+    sendRematchStatus(room, color, accepted);
+    return;
+  }
+
+  const colors = [...room.players.values()];
+  const bothPlayersAccepted = colors.length === 2 && colors.every((playerColor) => room.rematchVotes.get(playerColor) === "yes");
+  if (bothPlayersAccepted) {
+    resetRoomForRematch(room);
+    broadcast(room, { type: "rematch", status: "started" });
+    syncRoom(room);
+    return;
+  }
+
+  sendRematchStatus(room, color, accepted);
 }
 
 function getPieceCounts(board) {
@@ -204,6 +271,11 @@ wss.on("connection", (ws) => {
 
     if (message.type === "move") {
       handleMove(ws, message);
+      return;
+    }
+
+    if (message.type === "rematch") {
+      handleRematch(ws, message);
     }
   });
 
