@@ -1,13 +1,22 @@
-const SIZE = 8;
-const WHITE = "white";
-const BLACK = "black";
+const rules = window.CheckersRules;
+if (!rules) throw new Error("Checkers rules failed to load.");
+
+const {
+  SIZE,
+  WHITE,
+  BLACK,
+  createInitialBoard,
+  isDark,
+  opponent,
+  cloneBoard,
+  cloneMove,
+  getCaptureMovesForPiece,
+  getAllMoves,
+  applyMove,
+  sameSquare,
+} = rules;
+
 const PREFERENCES_KEY = "russian-checkers-preferences";
-const directions = [
-  [-1, -1],
-  [-1, 1],
-  [1, -1],
-  [1, 1],
-];
 
 const translations = window.I18N || {};
 const WIN_SCORE = 10000;
@@ -221,25 +230,6 @@ function applyTranslations() {
   });
 }
 
-function emptyBoard() {
-  return Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
-}
-
-function createInitialBoard() {
-  const board = emptyBoard();
-  for (let row = 0; row < 3; row += 1) {
-    for (let col = 0; col < SIZE; col += 1) {
-      if (isDark(row, col)) board[row][col] = { color: BLACK, king: false };
-    }
-  }
-  for (let row = 5; row < SIZE; row += 1) {
-    for (let col = 0; col < SIZE; col += 1) {
-      if (isDark(row, col)) board[row][col] = { color: WHITE, king: false };
-    }
-  }
-  return board;
-}
-
 function resetGame() {
   if (state.mode === "online") closeOnlineSocket();
   if (computerTimer) window.clearTimeout(computerTimer);
@@ -298,18 +288,6 @@ function resetOnlineLocalState() {
   state.log = [];
 }
 
-function isDark(row, col) {
-  return (row + col) % 2 === 1;
-}
-
-function inside(row, col) {
-  return row >= 0 && row < SIZE && col >= 0 && col < SIZE;
-}
-
-function opponent(color) {
-  return color === WHITE ? BLACK : WHITE;
-}
-
 function computerColor() {
   return opponent(state.playerColor);
 }
@@ -318,10 +296,64 @@ function isOnlineTurn() {
   return state.mode === "online" && state.online.connected && state.online.ready && state.turn === state.playerColor;
 }
 
+function getOnlineStatusType(statusKey) {
+  if (statusKey === "onlineConnecting") return "connecting";
+  if (
+    statusKey === "onlineError" ||
+    statusKey === "onlineServerMissing" ||
+    statusKey === "onlineServerUnavailable" ||
+    statusKey === "onlineDisconnected" ||
+    statusKey === "onlineRoomExpired" ||
+    statusKey === "onlineRoomFull" ||
+    statusKey === "onlineRoomNotFound" ||
+    statusKey === "onlineNotConnected" ||
+    statusKey === "onlineInvalidColor" ||
+    statusKey === "onlineColorTaken" ||
+    statusKey === "roomCodeRequired"
+  ) {
+    return "error";
+  }
+  if (
+    statusKey === "copiedRoomCode" ||
+    statusKey === "copiedRoomLink" ||
+    statusKey === "rematchStarted" ||
+    statusKey === "onlineOpponentDisconnected"
+  ) {
+    return "notice";
+  }
+  return "idle";
+}
+
 function setOnlineStatus(statusKey, statusParams = {}) {
   state.online.statusKey = statusKey;
   state.online.statusParams = statusParams;
   render();
+}
+
+function getOnlineStatusFromMessage(message = {}) {
+  const codeMap = {
+    missing_ws_url: "onlineServerMissing",
+    server_unavailable: "onlineServerUnavailable",
+    not_connected: "onlineNotConnected",
+    room_not_found: "onlineRoomNotFound",
+    room_full: "onlineRoomFull",
+    room_expired: "onlineRoomExpired",
+    opponent_disconnected: "onlineOpponentDisconnected",
+    invalid_color: "onlineInvalidColor",
+    color_taken: "onlineColorTaken",
+  };
+  if (message.code && codeMap[message.code]) return { key: codeMap[message.code], params: {} };
+
+  const text = String(message.message || "");
+  if (text === "Room expired.") return { key: "onlineRoomExpired", params: {} };
+  if (text === "Opponent disconnected.") return { key: "onlineOpponentDisconnected", params: {} };
+  if (text === "Room not found.") return { key: "onlineRoomNotFound", params: {} };
+  if (text === "Room is full.") return { key: "onlineRoomFull", params: {} };
+  if (text === "Invalid color.") return { key: "onlineInvalidColor", params: {} };
+  if (text === "Color is already taken.") return { key: "onlineColorTaken", params: {} };
+  if (text === "Could not connect.") return { key: "onlineServerUnavailable", params: {} };
+  if (text === "Not connected.") return { key: "onlineNotConnected", params: {} };
+  return { key: "onlineError", params: { message: text || t("unknownOnlineError") } };
 }
 
 function normalizeRoomId(value = "") {
@@ -399,10 +431,6 @@ async function shareRoomLink() {
   setOnlineStatus("copiedRoomLink");
 }
 
-function cloneBoard(board) {
-  return board.map((row) => row.map((piece) => (piece ? { ...piece } : null)));
-}
-
 function clonePoint(point) {
   return point ? { ...point } : null;
 }
@@ -439,14 +467,6 @@ function restoreSnapshot(snapshot) {
   state.twoKingsVsOneHalfMoves = snapshot.twoKingsVsOneHalfMoves || 0;
   state.log = cloneLog(snapshot.log);
   state.animation = null;
-}
-
-function cloneMove(move) {
-  return {
-    from: { ...move.from },
-    to: { ...move.to },
-    captures: move.captures.map((capture) => ({ ...capture })),
-  };
 }
 
 function coord({ row, col }) {
@@ -517,122 +537,6 @@ function hasInsufficientWinningMaterial() {
   if (pieces.length !== 2 || pieces.some((piece) => !piece.king)) return false;
   const colors = new Set(pieces.map((piece) => piece.color));
   return colors.size === 2 && !getAllMoves(state.board, state.turn, state.chainFrom).some((move) => move.captures.length);
-}
-
-function sameSquare(a, b) {
-  return a && b && a.row === b.row && a.col === b.col;
-}
-
-function getSimpleMoves(board, row, col) {
-  const piece = board[row][col];
-  if (!piece) return [];
-  const moves = [];
-
-  if (piece.king) {
-    for (const [dr, dc] of directions) {
-      let r = row + dr;
-      let c = col + dc;
-      while (inside(r, c) && !board[r][c]) {
-        moves.push({ from: { row, col }, to: { row: r, col: c }, captures: [] });
-        r += dr;
-        c += dc;
-      }
-    }
-    return moves;
-  }
-
-  const forward = piece.color === WHITE ? -1 : 1;
-  for (const dc of [-1, 1]) {
-    const r = row + forward;
-    const c = col + dc;
-    if (inside(r, c) && !board[r][c]) {
-      moves.push({ from: { row, col }, to: { row: r, col: c }, captures: [] });
-    }
-  }
-  return moves;
-}
-
-function getCaptureMovesForPiece(board, row, col) {
-  const piece = board[row][col];
-  if (!piece) return [];
-  return piece.king
-    ? getKingCaptures(board, row, col, piece.color)
-    : getManCaptures(board, row, col, piece.color);
-}
-
-function getManCaptures(board, row, col, color) {
-  const moves = [];
-  for (const [dr, dc] of directions) {
-    const midRow = row + dr;
-    const midCol = col + dc;
-    const landRow = row + dr * 2;
-    const landCol = col + dc * 2;
-    if (!inside(landRow, landCol) || !inside(midRow, midCol)) continue;
-    const target = board[midRow][midCol];
-    if (target?.color === opponent(color) && !board[landRow][landCol]) {
-      moves.push({
-        from: { row, col },
-        to: { row: landRow, col: landCol },
-        captures: [{ row: midRow, col: midCol }],
-      });
-    }
-  }
-  return moves;
-}
-
-function getKingCaptures(board, row, col, color) {
-  const moves = [];
-  for (const [dr, dc] of directions) {
-    let r = row + dr;
-    let c = col + dc;
-    let target = null;
-    while (inside(r, c)) {
-      const piece = board[r][c];
-      if (piece) {
-        if (piece.color === color || target) break;
-        target = { row: r, col: c };
-      } else if (target) {
-        moves.push({
-          from: { row, col },
-          to: { row: r, col: c },
-          captures: [target],
-        });
-      }
-      r += dr;
-      c += dc;
-    }
-  }
-  return moves;
-}
-
-function getAllMoves(board, color, chainFrom = null) {
-  if (chainFrom) return getCaptureMovesForPiece(board, chainFrom.row, chainFrom.col);
-
-  const captures = [];
-  const quiet = [];
-  for (let row = 0; row < SIZE; row += 1) {
-    for (let col = 0; col < SIZE; col += 1) {
-      if (board[row][col]?.color !== color) continue;
-      captures.push(...getCaptureMovesForPiece(board, row, col));
-      quiet.push(...getSimpleMoves(board, row, col));
-    }
-  }
-  return captures.length ? captures : quiet;
-}
-
-function applyMove(board, move) {
-  const next = cloneBoard(board);
-  const piece = next[move.from.row][move.from.col];
-  next[move.from.row][move.from.col] = null;
-  for (const captured of move.captures) {
-    next[captured.row][captured.col] = null;
-  }
-  const crownRow = piece.color === WHITE ? 0 : SIZE - 1;
-  next[move.to.row][move.to.col] = {
-    ...piece,
-    king: piece.king || move.to.row === crownRow,
-  };
-  return next;
 }
 
 function canPromote(piece, move) {
@@ -892,7 +796,7 @@ function connectOnline(action, roomId = "") {
   const url = window.CHECKERS_CONFIG?.WS_URL;
   const normalizedRoomId = normalizeRoomId(roomId);
   if (!url) {
-    setOnlineStatus("onlineError", { message: "Missing WebSocket URL." });
+    setOnlineStatus("onlineServerMissing");
     return;
   }
 
@@ -917,10 +821,12 @@ function connectOnline(action, roomId = "") {
     if (message.type === "state") {
       applyOnlineState(message.room, message.color);
     } else if (message.type === "error") {
-      setOnlineStatus("onlineError", { message: message.message });
+      const status = getOnlineStatusFromMessage(message);
+      setOnlineStatus(status.key, status.params);
     } else if (message.type === "notice") {
-      if (message.closeReason) state.online.closeReason = { message: message.message };
-      setOnlineStatus("onlineError", { message: message.message });
+      const status = getOnlineStatusFromMessage(message);
+      if (message.closeReason) state.online.closeReason = status;
+      setOnlineStatus(status.key, status.params);
     } else if (message.type === "rematch") {
       handleRematchStatus(message.status);
     }
@@ -932,17 +838,19 @@ function connectOnline(action, roomId = "") {
     state.online.ready = false;
     if (state.mode === "online") {
       if (state.online.closeReason) {
-        setOnlineStatus("onlineError", state.online.closeReason);
+        setOnlineStatus(state.online.closeReason.key, state.online.closeReason.params);
         state.online.closeReason = null;
+      } else if (state.online.statusKey === "onlineServerUnavailable") {
+        setOnlineStatus("onlineServerUnavailable");
       } else {
-        setOnlineStatus("onlineIdle");
+        setOnlineStatus("onlineDisconnected");
       }
     }
   });
 
   socket.addEventListener("error", () => {
     if (state.online.socket !== socket) return;
-    setOnlineStatus("onlineError", { message: "Could not connect." });
+    setOnlineStatus("onlineServerUnavailable");
   });
 }
 
@@ -1014,7 +922,7 @@ function handleRematchStatus(status) {
 function sendOnlineMove(move) {
   const socket = state.online.socket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    setOnlineStatus("onlineError", { message: "Not connected." });
+    setOnlineStatus("onlineNotConnected");
     return;
   }
   socket.send(JSON.stringify({ type: "move", move }));
@@ -1023,7 +931,7 @@ function sendOnlineMove(move) {
 function sendRematchVote(accept) {
   const socket = state.online.socket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    setOnlineStatus("onlineError", { message: "Not connected." });
+    setOnlineStatus("onlineNotConnected");
     return;
   }
   state.online.rematchChoice = accept ? "yes" : "no";
@@ -1250,7 +1158,7 @@ function closeInstructionsOverlay() {
 function openColorChoiceOverlay(roomId) {
   const normalizedRoomId = normalizeRoomId(roomId);
   if (!normalizedRoomId) {
-    setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
+    setOnlineStatus("roomCodeRequired");
     return;
   }
   state.online.pendingJoinRoomId = normalizedRoomId;
@@ -1266,7 +1174,7 @@ function chooseOnlineColor(color) {
   const roomId = state.online.pendingJoinRoomId;
   if (!roomId) {
     closeColorChoiceOverlay();
-    setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
+    setOnlineStatus("roomCodeRequired");
     return;
   }
   sideSelect.value = color;
@@ -1419,6 +1327,7 @@ function render(messageKey = "", messageParams = {}) {
 
   renderResultOverlay(winner, draw, pieceCounts);
   onlineStatus.textContent = t(state.online.statusKey, state.online.statusParams);
+  onlineStatus.className = `online-status ${getOnlineStatusType(state.online.statusKey)}`;
 
   if (state.animation) {
     if (animationTimer) window.clearTimeout(animationTimer);
@@ -1548,7 +1457,7 @@ joinRoomBtn.addEventListener("click", () => {
   unlockAudio();
   const roomId = normalizeRoomId(roomCodeInput.value);
   if (!roomId) {
-    setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
+    setOnlineStatus("roomCodeRequired");
     return;
   }
   roomCodeInput.value = roomId;

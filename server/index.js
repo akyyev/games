@@ -73,6 +73,14 @@ function send(ws, message) {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
 }
 
+function sendError(ws, code, message) {
+  send(ws, { type: "error", code, message });
+}
+
+function sendNotice(ws, code, message, extra = {}) {
+  send(ws, { type: "notice", code, message, ...extra });
+}
+
 function broadcast(room, message) {
   for (const ws of room.players.keys()) {
     send(ws, message);
@@ -100,12 +108,12 @@ function joinRoom(ws, room, preferredColor = null) {
   const taken = new Set(players.map(([, color]) => color));
   const requestedColor = normalizeColor(preferredColor);
   if (preferredColor && !requestedColor) {
-    send(ws, { type: "error", message: "Invalid color." });
+    sendError(ws, "invalid_color", "Invalid color.");
     return;
   }
 
   if (players.length >= 2 && !isAlreadyInRoom) {
-    send(ws, { type: "error", message: "Room is full." });
+    sendError(ws, "room_full", "Room is full.");
     return;
   }
 
@@ -116,7 +124,7 @@ function joinRoom(ws, room, preferredColor = null) {
   } else if (!color) {
     color = !taken.has(rules.WHITE) ? rules.WHITE : rules.BLACK;
   } else if (taken.has(color) && !isAlreadyInRoom) {
-    send(ws, { type: "error", message: "Color is already taken." });
+    sendError(ws, "color_taken", "Color is already taken.");
     return;
   }
 
@@ -140,25 +148,27 @@ function leaveCurrentRoom(ws) {
     rooms.delete(room.id);
   } else {
     syncRoom(room);
-    broadcast(room, { type: "notice", message: "Opponent disconnected." });
+    for (const playerWs of room.players.keys()) {
+      sendNotice(playerWs, "opponent_disconnected", "Opponent disconnected.");
+    }
   }
 }
 
 function handleMove(ws, payload) {
   const room = rooms.get(ws.roomId);
-  if (!room) return send(ws, { type: "error", message: "Room not found." });
+  if (!room) return sendError(ws, "room_not_found", "Room not found.");
   if (room.draw || rules.getWinner(room.board, room.turn, room.chainFrom)) {
-    return send(ws, { type: "error", message: "Game is over." });
+    return sendError(ws, "game_over", "Game is over.");
   }
 
   const color = room.players.get(ws);
-  if (!color || color !== room.turn) return send(ws, { type: "error", message: "Not your turn." });
+  if (!color || color !== room.turn) return sendError(ws, "not_your_turn", "Not your turn.");
 
   const legalMove = rules
     .getAllMoves(room.board, room.turn, room.chainFrom)
     .find((move) => rules.sameMove(move, payload.move));
 
-  if (!legalMove) return send(ws, { type: "error", message: "Illegal move." });
+  if (!legalMove) return sendError(ws, "illegal_move", "Illegal move.");
 
   const piece = room.board[legalMove.from.row][legalMove.from.col];
   room.rematchVotes.clear();
@@ -243,11 +253,11 @@ function sendRematchStatus(room, voterColor, accepted) {
 
 function handleRematch(ws, payload) {
   const room = rooms.get(ws.roomId);
-  if (!room) return send(ws, { type: "error", message: "Room not found." });
-  if (!isGameOver(room)) return send(ws, { type: "error", message: "Game is not over." });
+  if (!room) return sendError(ws, "room_not_found", "Room not found.");
+  if (!isGameOver(room)) return sendError(ws, "game_not_over", "Game is not over.");
 
   const color = room.players.get(ws);
-  if (!color) return send(ws, { type: "error", message: "Player not found." });
+  if (!color) return sendError(ws, "player_not_found", "Player not found.");
   if ([...room.rematchVotes.values()].includes("no")) {
     touchRoom(room);
     return send(ws, {
@@ -324,6 +334,12 @@ function updateTwoKingsVsOneCounter(room) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    return;
+  }
+
   res.writeHead(200, { "content-type": "text/plain" });
   res.end("Russian Checkers online server is running.\n");
 });
@@ -336,7 +352,7 @@ wss.on("connection", (ws) => {
     try {
       message = JSON.parse(raw.toString());
     } catch {
-      return send(ws, { type: "error", message: "Invalid message." });
+      return sendError(ws, "invalid_message", "Invalid message.");
     }
 
     if (message.type === "create") {
@@ -347,7 +363,7 @@ wss.on("connection", (ws) => {
 
     if (message.type === "join") {
       const room = rooms.get(String(message.roomId || "").trim().toUpperCase());
-      if (!room) return send(ws, { type: "error", message: "Room not found." });
+      if (!room) return sendError(ws, "room_not_found", "Room not found.");
       joinRoom(ws, room, message.preferredColor);
       return;
     }
@@ -371,7 +387,9 @@ function cleanupIdleRooms() {
   const now = Date.now();
   for (const [roomId, room] of rooms.entries()) {
     if (room.players.size > 0 && now - room.updatedAt < ROOM_TTL_MS) continue;
-    broadcast(room, { type: "notice", message: "Room expired.", closeReason: true });
+    for (const ws of room.players.keys()) {
+      sendNotice(ws, "room_expired", "Room expired.", { closeReason: true });
+    }
     for (const ws of room.players.keys()) {
       ws.roomId = null;
       ws.close();
