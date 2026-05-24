@@ -10,6 +10,11 @@ const directions = [
 ];
 
 const translations = window.I18N || {};
+const WIN_SCORE = 10000;
+const SEARCH_DEPTHS = {
+  hard: 4,
+  "extra-hard": 7,
+};
 
 const state = {
   board: [],
@@ -1034,8 +1039,7 @@ function chooseComputerMove() {
   const candidates = preferFreshPositions(moves, color);
   if (state.level === "easy") return randomMove(candidates);
   if (state.level === "medium") return chooseByHeuristic(state.board, candidates, color);
-  if (state.level === "hard") return chooseSearchMove(candidates, 4, color);
-  return chooseSearchMove(candidates, 6, color);
+  return chooseSearchMove(candidates, SEARCH_DEPTHS[state.level] || SEARCH_DEPTHS.hard, color);
 }
 
 function randomMove(moves) {
@@ -1096,8 +1100,12 @@ function orderMoves(board, moves, color) {
 }
 
 function minimax(board, color, depth, alpha, beta, chainFrom, perspective = BLACK) {
+  const winner = getMaterialWinner(board);
+  if (winner) return winner === perspective ? WIN_SCORE + depth : -WIN_SCORE - depth;
+
   const moves = getAllMoves(board, color, chainFrom);
-  if (depth === 0 || !moves.length) return evaluateBoard(board, perspective);
+  if (!moves.length) return opponent(color) === perspective ? WIN_SCORE + depth : -WIN_SCORE - depth;
+  if (depth === 0) return evaluateBoard(board, perspective);
   const orderedMoves = orderMoves(board, moves, perspective);
 
   if (color === perspective) {
@@ -1138,16 +1146,39 @@ function evaluateMove(previous, next, move, color) {
 
 function evaluateBoard(board, perspective = BLACK) {
   let score = 0;
+  let ownKings = 0;
+  let opponentKings = 0;
+  let ownBackRank = 0;
+  let opponentBackRank = 0;
   for (let row = 0; row < SIZE; row += 1) {
     for (let col = 0; col < SIZE; col += 1) {
       const piece = board[row][col];
       if (!piece) continue;
-      const value = piece.king ? 7 : 3 + (piece.color === BLACK ? row : SIZE - 1 - row) * 0.12;
+      const isOwnPiece = piece.color === perspective;
+      const value = piece.king ? 7.4 : 3 + (piece.color === BLACK ? row : SIZE - 1 - row) * 0.14;
       const center = 0.08 * (3.5 - (Math.abs(row - 3.5) + Math.abs(col - 3.5)) / 2);
-      score += (piece.color === perspective ? 1 : -1) * (value + center);
+      const backRank = piece.color === WHITE ? SIZE - 1 : 0;
+      if (piece.king) {
+        if (isOwnPiece) ownKings += 1;
+        else opponentKings += 1;
+      }
+      if (!piece.king && row === backRank) {
+        if (isOwnPiece) ownBackRank += 1;
+        else opponentBackRank += 1;
+      }
+      score += (isOwnPiece ? 1 : -1) * (value + center);
     }
   }
-  return score;
+  const kingPressure = ownKings - opponentKings;
+  const backRankGuard = ownBackRank - opponentBackRank;
+  return score + kingPressure * 0.25 + backRankGuard * 0.08;
+}
+
+function getMaterialWinner(board) {
+  const pieces = board.flat();
+  if (!pieces.some((piece) => piece?.color === WHITE)) return BLACK;
+  if (!pieces.some((piece) => piece?.color === BLACK)) return WHITE;
+  return null;
 }
 
 function getWinner(pieceCounts = getPieceCounts()) {
