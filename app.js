@@ -38,7 +38,9 @@ const state = {
     ready: false,
     statusKey: "onlineIdle",
     statusParams: {},
+    closeReason: null,
     rematchChoice: null,
+    pendingJoinRoomId: "",
   },
   log: [],
 };
@@ -75,6 +77,13 @@ const onlineStatus = document.querySelector("#onlineStatus");
 const resultOverlay = document.querySelector("#resultOverlay");
 const resultTitle = document.querySelector("#resultTitle");
 const resultScore = document.querySelector("#resultScore");
+const instructionsOverlay = document.querySelector("#instructionsOverlay");
+const instructionsBtn = document.querySelector("#instructionsBtn");
+const closeInstructionsBtn = document.querySelector("#closeInstructionsBtn");
+const colorChoiceOverlay = document.querySelector("#colorChoiceOverlay");
+const closeColorChoiceBtn = document.querySelector("#closeColorChoiceBtn");
+const chooseWhiteBtn = document.querySelector("#chooseWhiteBtn");
+const chooseBlackBtn = document.querySelector("#chooseBlackBtn");
 const closeResultBtn = document.querySelector("#closeResultBtn");
 const playAgainBtn = document.querySelector("#playAgainBtn");
 const declineRematchBtn = document.querySelector("#declineRematchBtn");
@@ -89,6 +98,15 @@ function loadPreferences() {
   } catch {
     return {};
   }
+}
+
+function getBrowserLanguage(validLanguages) {
+  const browserLanguages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const language of browserLanguages) {
+    const baseLanguage = String(language || "").toLowerCase().split("-")[0];
+    if (validLanguages.includes(baseLanguage)) return baseLanguage;
+  }
+  return "en";
 }
 
 function savePreferences() {
@@ -112,7 +130,9 @@ function applyPreferences() {
   const validLanguages = Object.keys(translations);
   const validStyles = ["classic", "tournament", "midnight", "porcelain"];
 
-  if (validLanguages.includes(preferences.language)) state.language = preferences.language;
+  state.language = validLanguages.includes(preferences.language)
+    ? preferences.language
+    : getBrowserLanguage(validLanguages);
   if (validModes.includes(preferences.mode)) state.mode = preferences.mode;
   if (validLevels.includes(preferences.level)) state.level = preferences.level;
   if (validColors.includes(preferences.playerColor)) state.playerColor = preferences.playerColor;
@@ -243,7 +263,10 @@ function initializeGame() {
   if (roomFromUrl) {
     state.mode = "online";
     modeSelect.value = "online";
-    connectOnline("join", roomFromUrl);
+    resetOnlineLocalState();
+    roomCodeInput.value = roomFromUrl;
+    setOnlineStatus("onlineChooseSide");
+    openColorChoiceOverlay(roomFromUrl);
     return;
   }
 
@@ -846,15 +869,18 @@ function undoMove() {
 
 function closeOnlineSocket() {
   if (state.online.socket) {
-    state.online.socket.close();
+    const socket = state.online.socket;
     state.online.socket = null;
+    state.online.socket.close();
   }
   state.online.connected = false;
   state.online.ready = false;
   state.online.roomId = "";
   state.online.statusKey = "onlineIdle";
   state.online.statusParams = {};
+  state.online.closeReason = null;
   state.online.rematchChoice = null;
+  state.online.pendingJoinRoomId = "";
 }
 
 function connectOnline(action, roomId = "") {
@@ -876,16 +902,19 @@ function connectOnline(action, roomId = "") {
   state.online.socket = socket;
 
   socket.addEventListener("open", () => {
-    socket.send(JSON.stringify({ type: action, roomId: normalizedRoomId }));
+    if (state.online.socket !== socket) return;
+    socket.send(JSON.stringify({ type: action, roomId: normalizedRoomId, preferredColor: sideSelect.value }));
   });
 
   socket.addEventListener("message", (event) => {
+    if (state.online.socket !== socket) return;
     const message = JSON.parse(event.data);
     if (message.type === "state") {
       applyOnlineState(message.room, message.color);
     } else if (message.type === "error") {
       setOnlineStatus("onlineError", { message: message.message });
     } else if (message.type === "notice") {
+      if (message.closeReason) state.online.closeReason = { message: message.message };
       setOnlineStatus("onlineError", { message: message.message });
     } else if (message.type === "rematch") {
       handleRematchStatus(message.status);
@@ -893,12 +922,21 @@ function connectOnline(action, roomId = "") {
   });
 
   socket.addEventListener("close", () => {
+    if (state.online.socket !== socket) return;
     state.online.connected = false;
     state.online.ready = false;
-    if (state.mode === "online") setOnlineStatus("onlineIdle");
+    if (state.mode === "online") {
+      if (state.online.closeReason) {
+        setOnlineStatus("onlineError", state.online.closeReason);
+        state.online.closeReason = null;
+      } else {
+        setOnlineStatus("onlineIdle");
+      }
+    }
   });
 
   socket.addEventListener("error", () => {
+    if (state.online.socket !== socket) return;
     setOnlineStatus("onlineError", { message: "Could not connect." });
   });
 }
@@ -911,6 +949,7 @@ function applyOnlineState(room, color) {
   state.online.ready = room.players.length > 1;
   state.online.roomId = room.id;
   state.playerColor = color;
+  sideSelect.value = color;
   state.flipped = color === BLACK;
   state.board = cloneBoard(room.board);
   state.turn = room.turn;
@@ -921,6 +960,10 @@ function applyOnlineState(room, color) {
   state.twoKingsVsOneHalfMoves = room.twoKingsVsOneHalfMoves || 0;
   state.selected = null;
   state.legalMoves = [];
+  if (state.chainFrom && state.turn === color) {
+    state.selected = clonePoint(state.chainFrom);
+    state.legalMoves = getCaptureMovesForPiece(state.board, state.chainFrom.row, state.chainFrom.col);
+  }
   state.busy = false;
   state.history = [];
   if (hadMove) animateAcceptedMove(previousBoard, room);
@@ -1165,6 +1208,43 @@ function closeResultOverlay() {
   resultOverlay.hidden = true;
 }
 
+function openInstructionsOverlay() {
+  instructionsOverlay.hidden = false;
+}
+
+function closeInstructionsOverlay() {
+  instructionsOverlay.hidden = true;
+}
+
+function openColorChoiceOverlay(roomId) {
+  const normalizedRoomId = normalizeRoomId(roomId);
+  if (!normalizedRoomId) {
+    setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
+    return;
+  }
+  state.online.pendingJoinRoomId = normalizedRoomId;
+  roomCodeInput.value = normalizedRoomId;
+  colorChoiceOverlay.hidden = false;
+}
+
+function closeColorChoiceOverlay() {
+  colorChoiceOverlay.hidden = true;
+}
+
+function chooseOnlineColor(color) {
+  const roomId = state.online.pendingJoinRoomId;
+  if (!roomId) {
+    closeColorChoiceOverlay();
+    setOnlineStatus("onlineError", { message: t("roomCodeRequired") });
+    return;
+  }
+  sideSelect.value = color;
+  state.playerColor = color;
+  state.flipped = color === BLACK;
+  closeColorChoiceOverlay();
+  connectOnline("join", roomId);
+}
+
 function getMoveAnimationStyle(from, to) {
   const direction = state.flipped ? -1 : 1;
   const dx = (from.col - to.col) * direction * 1.3889;
@@ -1336,9 +1416,18 @@ modeSelect.addEventListener("change", () => {
 
 sideSelect.addEventListener("change", () => {
   unlockAudio();
+  if (state.mode === "online" && state.online.connected) {
+    sideSelect.value = state.playerColor;
+    render();
+    return;
+  }
   state.playerColor = sideSelect.value;
   state.flipped = state.playerColor === BLACK;
   savePreferences();
+  if (state.mode === "online") {
+    render();
+    return;
+  }
   resetGame();
 });
 
@@ -1392,6 +1481,26 @@ closeResultBtn.addEventListener("click", () => {
   unlockAudio();
   closeResultOverlay();
 });
+instructionsBtn.addEventListener("click", () => {
+  unlockAudio();
+  openInstructionsOverlay();
+});
+closeInstructionsBtn.addEventListener("click", () => {
+  unlockAudio();
+  closeInstructionsOverlay();
+});
+closeColorChoiceBtn.addEventListener("click", () => {
+  unlockAudio();
+  closeColorChoiceOverlay();
+});
+chooseWhiteBtn.addEventListener("click", () => {
+  unlockAudio();
+  chooseOnlineColor(WHITE);
+});
+chooseBlackBtn.addEventListener("click", () => {
+  unlockAudio();
+  chooseOnlineColor(BLACK);
+});
 createRoomBtn.addEventListener("click", () => {
   unlockAudio();
   connectOnline("create");
@@ -1412,7 +1521,8 @@ joinRoomBtn.addEventListener("click", () => {
     return;
   }
   roomCodeInput.value = roomId;
-  connectOnline("join", roomId);
+  setOnlineStatus("onlineChooseSide");
+  openColorChoiceOverlay(roomId);
 });
 roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = normalizeRoomId(roomCodeInput.value);

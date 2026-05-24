@@ -3,6 +3,8 @@ const { WebSocketServer } = require("ws");
 const rules = require("../shared/rules.js");
 
 const PORT = process.env.PORT || 10000;
+const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MS || 60 * 60 * 1000);
+const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS || 5 * 60 * 1000);
 const rooms = new Map();
 
 function createRoomId() {
@@ -39,10 +41,13 @@ function createRoom() {
     log: [],
     draw: false,
     twoKingsVsOneHalfMoves: 0,
+    positionHistory: [],
     rematchVotes: new Map(),
     players: new Map(),
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
+  room.positionHistory = [positionKey(room.board, room.turn, room.chainFrom)];
   rooms.set(room.id, room);
   return room;
 }
@@ -58,6 +63,7 @@ function serializeRoom(room) {
     log: room.log,
     winner: room.draw ? null : rules.getWinner(room.board, room.turn, room.chainFrom),
     draw: room.draw,
+    twoKingsVsOneHalfMoves: room.twoKingsVsOneHalfMoves,
     rematchVotes: Object.fromEntries(room.rematchVotes),
     players,
   };
@@ -73,7 +79,12 @@ function broadcast(room, message) {
   }
 }
 
+function touchRoom(room) {
+  room.updatedAt = Date.now();
+}
+
 function syncRoom(room) {
+  touchRoom(room);
   for (const [ws, color] of room.players.entries()) {
     send(ws, {
       type: "state",
@@ -84,16 +95,53 @@ function syncRoom(room) {
 }
 
 function joinRoom(ws, room, preferredColor = null) {
-  const taken = new Set(room.players.values());
-  let color = preferredColor && !taken.has(preferredColor) ? preferredColor : null;
-  if (!color) color = !taken.has(rules.WHITE) ? rules.WHITE : rules.BLACK;
-  if (taken.has(color)) {
+  const isAlreadyInRoom = room.players.has(ws);
+  const players = [...room.players.entries()];
+  const taken = new Set(players.map(([, color]) => color));
+  const requestedColor = normalizeColor(preferredColor);
+  if (preferredColor && !requestedColor) {
+    send(ws, { type: "error", message: "Invalid color." });
+    return;
+  }
+
+  if (players.length >= 2 && !isAlreadyInRoom) {
     send(ws, { type: "error", message: "Room is full." });
     return;
   }
+
+  let color = requestedColor || null;
+  let colorToReassign = null;
+  if (requestedColor && taken.has(requestedColor) && players.length === 1 && !isAlreadyInRoom) {
+    colorToReassign = rules.opponent(requestedColor);
+  } else if (!color) {
+    color = !taken.has(rules.WHITE) ? rules.WHITE : rules.BLACK;
+  } else if (taken.has(color) && !isAlreadyInRoom) {
+    send(ws, { type: "error", message: "Color is already taken." });
+    return;
+  }
+
+  if (!isAlreadyInRoom) leaveCurrentRoom(ws);
+  if (colorToReassign) room.players.set(players[0][0], colorToReassign);
   ws.roomId = room.id;
   room.players.set(ws, color);
   syncRoom(room);
+}
+
+function normalizeColor(color) {
+  return color === rules.WHITE || color === rules.BLACK ? color : null;
+}
+
+function leaveCurrentRoom(ws) {
+  const room = rooms.get(ws.roomId);
+  if (!room) return;
+  room.players.delete(ws);
+  ws.roomId = null;
+  if (!room.players.size) {
+    rooms.delete(room.id);
+  } else {
+    syncRoom(room);
+    broadcast(room, { type: "notice", message: "Opponent disconnected." });
+  }
 }
 
 function handleMove(ws, payload) {
@@ -126,7 +174,7 @@ function handleMove(ws, payload) {
   } else {
     room.chainFrom = null;
     room.turn = rules.opponent(room.turn);
-    updateTwoKingsVsOneCounter(room);
+    recordCurrentPosition(room);
   }
 
   syncRoom(room);
@@ -144,10 +192,41 @@ function resetRoomForRematch(room) {
   room.log = [];
   room.draw = false;
   room.twoKingsVsOneHalfMoves = 0;
+  room.positionHistory = [positionKey(room.board, room.turn, room.chainFrom)];
   room.rematchVotes.clear();
 }
 
+function positionKey(board = rules.createInitialBoard(), turn = rules.WHITE, chainFrom = null) {
+  const pieces = [];
+  for (let row = 0; row < rules.SIZE; row += 1) {
+    for (let col = 0; col < rules.SIZE; col += 1) {
+      const piece = board[row][col];
+      if (piece) pieces.push(`${row}${col}${piece.color[0]}${piece.king ? "K" : "M"}`);
+    }
+  }
+  const chain = chainFrom ? `${chainFrom.row}${chainFrom.col}` : "-";
+  return `${turn}|${chain}|${pieces.join(",")}`;
+}
+
+function countPositionOccurrences(room, key) {
+  return room.positionHistory.filter((position) => position === key).length;
+}
+
+function recordCurrentPosition(room) {
+  const key = positionKey(room.board, room.turn, room.chainFrom);
+  room.positionHistory.push(key);
+  updateTwoKingsVsOneCounter(room);
+  if (
+    countPositionOccurrences(room, key) >= 3 ||
+    hasInsufficientWinningMaterial(room.board, room.turn, room.chainFrom) ||
+    room.twoKingsVsOneHalfMoves >= 20
+  ) {
+    room.draw = true;
+  }
+}
+
 function sendRematchStatus(room, voterColor, accepted) {
+  touchRoom(room);
   for (const [playerWs, playerColor] of room.players.entries()) {
     send(playerWs, {
       type: "rematch",
@@ -170,6 +249,7 @@ function handleRematch(ws, payload) {
   const color = room.players.get(ws);
   if (!color) return send(ws, { type: "error", message: "Player not found." });
   if ([...room.rematchVotes.values()].includes("no")) {
+    touchRoom(room);
     return send(ws, {
       type: "rematch",
       status: room.rematchVotes.get(color) === "no" ? "declinedByYou" : "declinedByOpponent",
@@ -228,15 +308,18 @@ function isTwoKingsVsOneKingEndgame(board) {
   );
 }
 
+function hasInsufficientWinningMaterial(board, turn, chainFrom) {
+  const pieces = board.flat().filter(Boolean);
+  if (pieces.length !== 2 || pieces.some((piece) => !piece.king)) return false;
+  const colors = new Set(pieces.map((piece) => piece.color));
+  return colors.size === 2 && !rules.getAllMoves(board, turn, chainFrom).some((move) => move.captures.length);
+}
+
 function updateTwoKingsVsOneCounter(room) {
   if (isTwoKingsVsOneKingEndgame(room.board)) {
     room.twoKingsVsOneHalfMoves += 1;
   } else {
     room.twoKingsVsOneHalfMoves = 0;
-  }
-
-  if (!rules.getWinner(room.board, room.turn, room.chainFrom) && room.twoKingsVsOneHalfMoves >= 20) {
-    room.draw = true;
   }
 }
 
@@ -280,17 +363,24 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    const room = rooms.get(ws.roomId);
-    if (!room) return;
-    room.players.delete(ws);
-    if (!room.players.size) {
-      rooms.delete(room.id);
-    } else {
-      syncRoom(room);
-      broadcast(room, { type: "notice", message: "Opponent disconnected." });
-    }
+    leaveCurrentRoom(ws);
   });
 });
+
+function cleanupIdleRooms() {
+  const now = Date.now();
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.players.size > 0 && now - room.updatedAt < ROOM_TTL_MS) continue;
+    broadcast(room, { type: "notice", message: "Room expired.", closeReason: true });
+    for (const ws of room.players.keys()) {
+      ws.roomId = null;
+      ws.close();
+    }
+    rooms.delete(roomId);
+  }
+}
+
+setInterval(cleanupIdleRooms, ROOM_CLEANUP_INTERVAL_MS).unref();
 
 server.listen(PORT, () => {
   console.log(`Russian Checkers online server listening on ${PORT}`);

@@ -374,23 +374,30 @@ body[data-turn-owner="local"] .turn-lane span {
 .piece.king::before {
   content: "";
   position: absolute;
-  inset: 23%;
-  border: 0.22rem solid var(--highlight);
+  inset: 12%;
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.28), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.2));
+  border: 0.16rem solid color-mix(in srgb, var(--highlight), white 18%);
   border-radius: 50%;
   box-shadow:
-    0 0 0 0.28rem rgba(0, 0, 0, 0.08),
-    inset 0 0 0 0.22rem rgba(255, 255, 255, 0.12);
+    0 0 0 0.18rem rgba(0, 0, 0, 0.18),
+    inset 0 0.34rem 0.25rem rgba(255, 255, 255, 0.2),
+    inset 0 -0.34rem 0.24rem rgba(0, 0, 0, 0.22);
 }
 
 .piece.king::after {
-  content: "K";
+  content: "";
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--highlight);
-  font-size: clamp(0.7rem, 2vw, 1.05rem);
-  font-weight: 900;
+  inset: 29%;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.22), transparent 38%),
+    color-mix(in srgb, var(--highlight), transparent 62%);
+  border: 0.12rem solid color-mix(in srgb, var(--highlight), white 16%);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0.22rem 0.2rem rgba(255, 255, 255, 0.18),
+    inset 0 -0.2rem 0.18rem rgba(0, 0, 0, 0.2);
 }
 
 .piece.move-animate {
@@ -791,7 +798,7 @@ select:focus {
 
 .actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(2.6rem, 1fr));
+  grid-template-columns: repeat(5, minmax(2.6rem, 1fr));
   gap: 0.65rem;
 }
 
@@ -888,6 +895,16 @@ button:disabled {
   line-height: 0.98;
 }
 
+.instructions-modal h2 {
+  font-size: clamp(1.45rem, 5vw, 2.15rem);
+  line-height: 1.08;
+}
+
+.color-choice-modal h2 {
+  font-size: clamp(1.65rem, 6vw, 2.45rem);
+  line-height: 1.06;
+}
+
 .result-score {
   margin-bottom: 1.25rem;
   color: var(--muted);
@@ -900,6 +917,12 @@ button:disabled {
   gap: 0.65rem;
 }
 
+.color-choice-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
 .result-modal button:not(.result-close) {
   width: 100%;
 }
@@ -907,6 +930,7 @@ button:disabled {
 .rules {
   padding: 1rem;
   border: 1px solid var(--line);
+  text-align: left;
 }
 
 .rules h3 {
@@ -964,7 +988,7 @@ button:disabled {
   }
 
   .actions {
-    grid-template-columns: repeat(4, minmax(2.4rem, 1fr));
+    grid-template-columns: repeat(5, minmax(2.35rem, 1fr));
     gap: 0.5rem;
   }
 
