@@ -314,6 +314,16 @@ body[data-turn-owner="local"] .turn-lane span {
   cursor: pointer;
 }
 
+.square.capture-source {
+  box-shadow:
+    inset 0 0 0 0.18rem var(--highlight),
+    0 0 1rem color-mix(in srgb, var(--highlight), transparent 38%);
+}
+
+.square.capture-source .piece {
+  animation: capture-source-pulse 720ms ease-out both;
+}
+
 .square.selected::after,
 .square.legal::after,
 .square.last::after {
@@ -426,6 +436,20 @@ body[data-turn-owner="local"] .turn-lane span {
 
   to {
     transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes capture-source-pulse {
+  0% {
+    transform: scale(1);
+  }
+
+  35% {
+    transform: scale(1.12);
+  }
+
+  100% {
+    transform: scale(1);
   }
 }
 

@@ -34,6 +34,7 @@ const state = {
   language: "en",
   selected: null,
   legalMoves: [],
+  captureHint: false,
   chainFrom: null,
   lastMove: [],
   flipped: false,
@@ -240,6 +241,7 @@ function resetGame() {
   state.turn = WHITE;
   state.selected = null;
   state.legalMoves = [];
+  state.captureHint = false;
   state.chainFrom = null;
   state.lastMove = [];
   state.busy = false;
@@ -277,6 +279,7 @@ function resetOnlineLocalState() {
   state.turn = WHITE;
   state.selected = null;
   state.legalMoves = [];
+  state.captureHint = false;
   state.chainFrom = null;
   state.lastMove = [];
   state.busy = false;
@@ -460,6 +463,7 @@ function restoreSnapshot(snapshot) {
   state.turn = snapshot.turn;
   state.selected = clonePoint(snapshot.selected);
   state.legalMoves = snapshot.legalMoves.map(cloneMove);
+  state.captureHint = false;
   state.chainFrom = clonePoint(snapshot.chainFrom);
   state.lastMove = snapshot.lastMove.map(clonePoint);
   state.positionHistory = [...(snapshot.positionHistory || [positionKey()])];
@@ -593,6 +597,7 @@ function makeMove(move, source = "player") {
   state.lastMove = [move.from, move.to];
   state.selected = null;
   state.legalMoves = [];
+  state.captureHint = false;
 
   const continuedCaptures = move.captures.length
     ? getCaptureMovesForPiece(state.board, move.to.row, move.to.col)
@@ -718,17 +723,30 @@ function handleSquareClick(row, col) {
   const piece = state.board[row][col];
   const landingMove = state.legalMoves.find((move) => move.to.row === row && move.to.col === col);
   if (landingMove) {
+    state.captureHint = false;
     makeMove(landingMove);
     return;
   }
 
-  if (!piece || piece.color !== state.turn) return;
-  if (state.chainFrom && !sameSquare(state.chainFrom, { row, col })) return;
-
   const allMoves = getAllMoves(state.board, state.turn, state.chainFrom);
-  const pieceMoves = allMoves.filter((move) => move.from.row === row && move.from.col === col);
-  if (!pieceMoves.length) return;
+  const forcedCapture = allMoves.some((move) => move.captures.length);
+  if (!piece || piece.color !== state.turn) return;
+  if (state.chainFrom && !sameSquare(state.chainFrom, { row, col })) {
+    state.captureHint = true;
+    render("mustContinue", { color: colorName(state.turn) });
+    return;
+  }
 
+  const pieceMoves = allMoves.filter((move) => move.from.row === row && move.from.col === col);
+  if (!pieceMoves.length) {
+    if (forcedCapture) {
+      state.captureHint = true;
+      render("captureRequired");
+    }
+    return;
+  }
+
+  state.captureHint = false;
   state.selected = { row, col };
   state.legalMoves = pieceMoves;
   render(pieceMoves[0].captures.length ? "captureRequired" : "chooseLanding");
@@ -873,6 +891,7 @@ function applyOnlineState(room, color) {
   state.twoKingsVsOneHalfMoves = room.twoKingsVsOneHalfMoves || 0;
   state.selected = null;
   state.legalMoves = [];
+  state.captureHint = false;
   if (state.chainFrom && state.turn === color) {
     state.selected = clonePoint(state.chainFrom);
     state.legalMoves = getCaptureMovesForPiece(state.board, state.chainFrom.row, state.chainFrom.col);
@@ -984,11 +1003,12 @@ function chooseByHeuristic(board, moves, color) {
 function chooseSearchMove(moves, depth, color) {
   let bestScore = -Infinity;
   let best = [];
+  const cache = new Map();
   for (const move of orderMoves(state.board, moves, color)) {
     const next = applyMove(state.board, move);
     const chain = move.captures.length ? getCaptureMovesForPiece(next, move.to.row, move.to.col) : [];
     const nextTurn = chain.length ? color : opponent(color);
-    const score = minimax(next, nextTurn, depth - 1, -Infinity, Infinity, chain.length ? move.to : null, color);
+    const score = minimax(next, nextTurn, depth - 1, -Infinity, Infinity, chain.length ? move.to : null, color, cache);
     if (score > bestScore) {
       bestScore = score;
       best = [move];
@@ -999,6 +1019,10 @@ function chooseSearchMove(moves, depth, color) {
   return randomMove(best);
 }
 
+function searchCacheKey(board, color, depth, chainFrom, perspective) {
+  return `${depth}|${perspective}|${positionKey(board, color, chainFrom)}`;
+}
+
 function orderMoves(board, moves, color) {
   return [...moves].sort((a, b) => {
     const nextA = applyMove(board, a);
@@ -1007,41 +1031,67 @@ function orderMoves(board, moves, color) {
   });
 }
 
-function minimax(board, color, depth, alpha, beta, chainFrom, perspective = BLACK) {
+function minimax(board, color, depth, alpha, beta, chainFrom, perspective = BLACK, cache = new Map()) {
+  const cacheKey = searchCacheKey(board, color, depth, chainFrom, perspective);
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const winner = getMaterialWinner(board);
-  if (winner) return winner === perspective ? WIN_SCORE + depth : -WIN_SCORE - depth;
+  if (winner) {
+    const score = winner === perspective ? WIN_SCORE + depth : -WIN_SCORE - depth;
+    cache.set(cacheKey, score);
+    return score;
+  }
 
   const moves = getAllMoves(board, color, chainFrom);
-  if (!moves.length) return opponent(color) === perspective ? WIN_SCORE + depth : -WIN_SCORE - depth;
-  if (depth === 0) return evaluateBoard(board, perspective);
+  if (!moves.length) {
+    const score = opponent(color) === perspective ? WIN_SCORE + depth : -WIN_SCORE - depth;
+    cache.set(cacheKey, score);
+    return score;
+  }
+  if (depth === 0) {
+    const score = evaluateBoard(board, perspective);
+    cache.set(cacheKey, score);
+    return score;
+  }
   const orderedMoves = orderMoves(board, moves, perspective);
 
   if (color === perspective) {
     let value = -Infinity;
+    let searchedEveryMove = true;
     for (const move of orderedMoves) {
       const next = applyMove(board, move);
       const chain = move.captures.length ? getCaptureMovesForPiece(next, move.to.row, move.to.col) : [];
       value = Math.max(
         value,
-        minimax(next, chain.length ? color : opponent(color), depth - 1, alpha, beta, chain.length ? move.to : null, perspective),
+        minimax(next, chain.length ? color : opponent(color), depth - 1, alpha, beta, chain.length ? move.to : null, perspective, cache),
       );
       alpha = Math.max(alpha, value);
-      if (alpha >= beta) break;
+      if (alpha >= beta) {
+        searchedEveryMove = false;
+        break;
+      }
     }
+    if (searchedEveryMove) cache.set(cacheKey, value);
     return value;
   }
 
   let value = Infinity;
+  let searchedEveryMove = true;
   for (const move of orderedMoves) {
     const next = applyMove(board, move);
     const chain = move.captures.length ? getCaptureMovesForPiece(next, move.to.row, move.to.col) : [];
     value = Math.min(
       value,
-      minimax(next, chain.length ? color : opponent(color), depth - 1, alpha, beta, chain.length ? move.to : null, perspective),
+      minimax(next, chain.length ? color : opponent(color), depth - 1, alpha, beta, chain.length ? move.to : null, perspective, cache),
     );
     beta = Math.min(beta, value);
-    if (alpha >= beta) break;
+    if (alpha >= beta) {
+      searchedEveryMove = false;
+      break;
+    }
   }
+  if (searchedEveryMove) cache.set(cacheKey, value);
   return value;
 }
 
@@ -1250,6 +1300,7 @@ function render(messageKey = "", messageParams = {}) {
       if (lastMoveSquares.has(key)) square.classList.add("last");
       if (sameSquare(state.selected, { row, col })) square.classList.add("selected");
       if (legalLandingSquares.has(key)) square.classList.add("legal");
+      if (state.captureHint && forcedCapture && movableSquares.has(key)) square.classList.add("capture-source");
 
       const piece = state.board[row][col];
       if (piece) {
