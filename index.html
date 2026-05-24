@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="pageTitle">Russian Checkers</title>
-    <link rel="stylesheet" href="./styles.css?v=17" />
+    <link rel="stylesheet" href="./styles.css?v=18" />
   </head>
   <body>
     <main class="shell">
@@ -200,10 +200,12 @@
         <h2 id="instructionsTitle" data-i18n="rulesTitle">Rules in play</h2>
         <div class="rules">
           <ul>
-            <li data-i18n="ruleMenCapture">Men capture forward and backward.</li>
-            <li data-i18n="ruleChains">Capture chains continue with the same piece.</li>
-            <li data-i18n="ruleCrown">Men crown immediately on the back rank.</li>
-            <li data-i18n="ruleKings">Kings move and capture over any distance.</li>
+            <li data-i18n="ruleMenMove">Regular pieces move one dark square diagonally forward.</li>
+            <li data-i18n="ruleMenCapture">If a capture is available, it must be played. Regular pieces can capture forward or backward.</li>
+            <li data-i18n="ruleChains">After a capture, the same piece must keep capturing while another capture is available.</li>
+            <li data-i18n="ruleCrown">A piece becomes a king as soon as it reaches the far edge, even during a capture chain.</li>
+            <li data-i18n="ruleKings">Kings move diagonally any distance and capture by jumping one enemy piece to any open square beyond it.</li>
+            <li data-i18n="ruleDraws">Draws happen on repeated positions, king-vs-king, or 2 kings vs 1 king after 10 full moves without a win.</li>
           </ul>
         </div>
       </section>
@@ -223,10 +225,10 @@
       </section>
     </div>
 
-    <script src="./i18n/en.js?v=17"></script>
-    <script src="./i18n/ru.js?v=17"></script>
-    <script src="./i18n/tr.js?v=17"></script>
-    <script src="./config.js?v=17"></script>
-    <script src="./app.js?v=17"></script>
+    <script src="./i18n/en.js?v=18"></script>
+    <script src="./i18n/ru.js?v=18"></script>
+    <script src="./i18n/tr.js?v=18"></script>
+    <script src="./config.js?v=18"></script>
+    <script src="./app.js?v=18"></script>
   </body>
 </html>
