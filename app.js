@@ -137,6 +137,14 @@ function savePreferences() {
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
 }
 
+function clearRoomFromUrl() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("room")) return;
+  url.searchParams.delete("room");
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", nextUrl || url.pathname);
+}
+
 function applyPreferences() {
   const preferences = loadPreferences();
   const validModes = ["human", "computer", "online"];
@@ -232,6 +240,7 @@ function applyTranslations() {
 }
 
 function resetGame() {
+  if (state.mode !== "online") clearRoomFromUrl();
   if (state.mode === "online") closeOnlineSocket();
   if (computerTimer) window.clearTimeout(computerTimer);
   computerTimer = null;
@@ -1399,8 +1408,10 @@ languageSelect.addEventListener("change", () => {
 
 modeSelect.addEventListener("change", () => {
   unlockAudio();
-  if (state.mode === "online" && modeSelect.value !== "online") closeOnlineSocket();
-  state.mode = modeSelect.value;
+  const nextMode = modeSelect.value;
+  if (nextMode !== "online") clearRoomFromUrl();
+  if (state.mode === "online" && nextMode !== "online") closeOnlineSocket();
+  state.mode = nextMode;
   savePreferences();
   resetGame();
 });
