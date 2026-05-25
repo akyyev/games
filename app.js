@@ -1066,6 +1066,11 @@ function connectOnline(action, roomId = "") {
 
 function applyOnlineState(room, color) {
   let switchedGame = false;
+  if (!room.gameId && state.gameId !== window.DEFAULT_GAME_ID) {
+    setOnlineStatus("onlineServerUnavailable");
+    closeOnlineSocket();
+    return;
+  }
   if (room.gameId && room.gameId !== state.gameId) {
     setActiveGame(room.gameId, { reset: false, persist: true, closeOnline: false });
     state.mode = "online";
