@@ -16,11 +16,11 @@ A browser-based Russian checkers game with local play, computer play, and online
 - Win and draw overlays with final score
 - Draw handling for repeated positions, 1 king vs 1 king, and 2 kings vs 1 king after 10 full moves
 - Saved local preferences for mode, side, level, language, style, board flip, and sounds
-- Shared move rules between local play and the online server
+- Checkers rules are isolated under `games/checkers/` so other board games can be added later
 
 ## Run Locally
 
-The frontend is static. Serve the project root so `shared/rules.js` loads correctly:
+The frontend is static. Serve the project root so game modules load correctly:
 
 ```bash
 python3 -m http.server 4173
@@ -69,9 +69,9 @@ The frontend can be hosted on GitHub Pages.
 On Render, the server settings are:
 
 ```text
-Root Directory: server
-Build Command: npm install
-Start Command: npm start
+Root Directory: .
+Build Command: cd server && npm install
+Start Command: cd server && npm start
 ```
 
 Note: free hosting services may sleep when inactive. Use an always-on plan if online play needs to be available immediately. An uptime monitor can call `/health`, but check your hosting provider's rules before using one.
@@ -84,8 +84,16 @@ Note: free hosting services may sleep when inactive. Use an always-on plan if on
 ├── index.html
 ├── styles.css
 ├── config.js
+├── games/
+│   ├── registry.js
+│   └── checkers/
+│       ├── engine.js
+│       └── rules.js
 ├── i18n/
-├── shared/
 ├── server/
 └── README.md
 ```
+
+## Multi-Game Direction
+
+The app is starting to separate game-specific logic from the shared shell. `games/registry.js` defines available games, and Checkers rules/engine logic live in `games/checkers/`. Future chess work can start in `games/chess/` while reusing the existing UI shell, translations, sound, themes, and online-room concepts where they fit.

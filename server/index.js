@@ -1,6 +1,6 @@
 const http = require("http");
 const { WebSocketServer } = require("ws");
-const rules = require("../shared/rules.js");
+const rules = require("../games/checkers/rules.js");
 
 const PORT = process.env.PORT || 10000;
 const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MS || 60 * 60 * 1000);
