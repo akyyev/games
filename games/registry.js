@@ -17,6 +17,13 @@ window.GAMES = {
     engine: window.CheckersEngine,
     ui: {
       boardSize: 8,
+      forcedCapture: true,
+      previewPieces: [
+        { row: 0, col: 1, piece: { color: "black" } },
+        { row: 1, col: 0, piece: { color: "black" } },
+        { row: 2, col: 3, piece: { color: "white", king: true } },
+        { row: 3, col: 2, piece: { color: "white" } },
+      ],
       modeSupport: {
         human: true,
         computer: true,
@@ -51,6 +58,12 @@ window.GAMES = {
     engine: window.ChessEngine,
     ui: {
       boardSize: 8,
+      previewPieces: [
+        { row: 0, col: 0, piece: { color: "black", type: "r" } },
+        { row: 0, col: 2, piece: { color: "black", type: "k" } },
+        { row: 2, col: 1, piece: { color: "white", type: "n" } },
+        { row: 3, col: 3, piece: { color: "white", type: "q" } },
+      ],
       modeSupport: {
         human: true,
         computer: true,
@@ -62,12 +75,8 @@ window.GAMES = {
       getPieceClasses(piece) {
         return ["chess-piece", piece.color, `piece-${piece.type}`];
       },
-      getPieceText(piece) {
-        const symbols = {
-          white: { k: "♔", q: "♕", r: "♖", b: "♗", n: "♘", p: "♙" },
-          black: { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" },
-        };
-        return symbols[piece.color]?.[piece.type] || "";
+      getPieceMarkup(piece) {
+        return window.ChessPieceSvgs?.[piece.color]?.[piece.type] || "";
       },
       getTurnClass(color) {
         return color;

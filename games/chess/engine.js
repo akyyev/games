@@ -1,11 +1,78 @@
 (function initChessEngine(global) {
+  const MATE_SCORE = 100000;
+  const SEARCH_DEPTHS = {
+    hard: 2,
+    "extra-hard": 3,
+  };
   const PIECE_VALUES = {
-    p: 1,
-    n: 3,
-    b: 3.2,
-    r: 5,
-    q: 9,
+    p: 100,
+    n: 320,
+    b: 330,
+    r: 500,
+    q: 900,
     k: 0,
+  };
+  const PIECE_TABLES = {
+    p: [
+      [0, 0, 0, 0, 0, 0, 0, 0],
+      [50, 50, 50, 50, 50, 50, 50, 50],
+      [10, 10, 20, 30, 30, 20, 10, 10],
+      [5, 5, 10, 25, 25, 10, 5, 5],
+      [0, 0, 0, 20, 20, 0, 0, 0],
+      [5, -5, -10, 0, 0, -10, -5, 5],
+      [5, 10, 10, -20, -20, 10, 10, 5],
+      [0, 0, 0, 0, 0, 0, 0, 0],
+    ],
+    n: [
+      [-50, -40, -30, -30, -30, -30, -40, -50],
+      [-40, -20, 0, 5, 5, 0, -20, -40],
+      [-30, 5, 15, 20, 20, 15, 5, -30],
+      [-30, 0, 20, 25, 25, 20, 0, -30],
+      [-30, 5, 20, 25, 25, 20, 5, -30],
+      [-30, 0, 15, 20, 20, 15, 0, -30],
+      [-40, -20, 0, 0, 0, 0, -20, -40],
+      [-50, -40, -30, -30, -30, -30, -40, -50],
+    ],
+    b: [
+      [-20, -10, -10, -10, -10, -10, -10, -20],
+      [-10, 5, 0, 0, 0, 0, 5, -10],
+      [-10, 10, 10, 10, 10, 10, 10, -10],
+      [-10, 0, 10, 15, 15, 10, 0, -10],
+      [-10, 5, 5, 15, 15, 5, 5, -10],
+      [-10, 0, 5, 10, 10, 5, 0, -10],
+      [-10, 0, 0, 0, 0, 0, 0, -10],
+      [-20, -10, -10, -10, -10, -10, -10, -20],
+    ],
+    r: [
+      [0, 0, 0, 5, 5, 0, 0, 0],
+      [5, 10, 10, 10, 10, 10, 10, 5],
+      [-5, 0, 0, 0, 0, 0, 0, -5],
+      [-5, 0, 0, 0, 0, 0, 0, -5],
+      [-5, 0, 0, 0, 0, 0, 0, -5],
+      [-5, 0, 0, 0, 0, 0, 0, -5],
+      [-5, 0, 0, 0, 0, 0, 0, -5],
+      [0, 0, 0, 5, 5, 0, 0, 0],
+    ],
+    q: [
+      [-20, -10, -10, -5, -5, -10, -10, -20],
+      [-10, 0, 5, 0, 0, 0, 0, -10],
+      [-10, 5, 5, 5, 5, 5, 0, -10],
+      [0, 0, 5, 5, 5, 5, 0, -5],
+      [-5, 0, 5, 5, 5, 5, 0, -5],
+      [-10, 0, 5, 5, 5, 5, 0, -10],
+      [-10, 0, 0, 0, 0, 0, 0, -10],
+      [-20, -10, -10, -5, -5, -10, -10, -20],
+    ],
+    k: [
+      [20, 30, 10, 0, 0, 10, 30, 20],
+      [20, 20, 0, 0, 0, 0, 20, 20],
+      [-10, -20, -20, -20, -20, -20, -20, -10],
+      [-20, -30, -30, -40, -40, -30, -30, -20],
+      [-30, -40, -40, -50, -50, -40, -40, -30],
+      [-30, -40, -40, -50, -50, -40, -40, -30],
+      [-30, -40, -40, -50, -50, -40, -40, -30],
+      [-30, -40, -40, -50, -50, -40, -40, -30],
+    ],
   };
 
   function createChessEngine(rules) {
@@ -46,6 +113,13 @@
       return moves[Math.floor(Math.random() * moves.length)];
     }
 
+    function pieceSquareValue(piece, row, col) {
+      const table = PIECE_TABLES[piece.type];
+      if (!table) return 0;
+      const tableRow = piece.color === WHITE ? row : rules.SIZE - 1 - row;
+      return table[tableRow][col] || 0;
+    }
+
     function evaluateBoard(board, perspective) {
       let score = 0;
       for (let row = 0; row < rules.SIZE; row += 1) {
@@ -53,8 +127,8 @@
           const piece = board[row][col];
           if (!piece) continue;
           const value = PIECE_VALUES[piece.type] || 0;
-          const center = 0.05 * (3.5 - (Math.abs(row - 3.5) + Math.abs(col - 3.5)) / 2);
-          score += (piece.color === perspective ? 1 : -1) * (value + center);
+          const placement = pieceSquareValue(piece, row, col);
+          score += (piece.color === perspective ? 1 : -1) * (value + placement);
         }
       }
       return score;
@@ -63,19 +137,15 @@
     function evaluateMove(board, move, color) {
       const next = rules.applyMove(board, move);
       const capture = move.capturedType ? (PIECE_VALUES[move.capturedType] || 0) * 1.4 : 0;
-      const promotion = move.promotion ? PIECE_VALUES[move.promotion] || 8 : 0;
+      const promotion = move.promotion ? PIECE_VALUES[move.promotion] || PIECE_VALUES.q : 0;
       return evaluateBoard(next, color) + capture + promotion;
     }
 
-    function chooseComputerMove(state) {
-      const moves = rules.getAllMoves(state.board, state.turn, state.chainFrom);
-      if (!moves.length) return null;
-      if (state.level === "easy") return randomMove(moves);
-
+    function chooseByHeuristic(board, moves, color) {
       let bestScore = -Infinity;
       let best = [];
       for (const move of moves) {
-        const score = evaluateMove(state.board, move, state.turn);
+        const score = evaluateMove(board, move, color);
         if (score > bestScore) {
           bestScore = score;
           best = [move];
@@ -84,6 +154,124 @@
         }
       }
       return randomMove(best);
+    }
+
+    function isDrawish(chess) {
+      return (
+        chess.isDraw() ||
+        chess.isStalemate() ||
+        chess.isThreefoldRepetition() ||
+        chess.isInsufficientMaterial()
+      );
+    }
+
+    function terminalScore(board, color, depth, perspective) {
+      const chess = getChess(board);
+      if (chess.isCheckmate()) {
+        const winner = rules.opponent(color);
+        return winner === perspective ? MATE_SCORE + depth : -MATE_SCORE - depth;
+      }
+      if (isDrawish(chess)) return 0;
+      return null;
+    }
+
+    function searchCacheKey(board, color, depth, perspective) {
+      return `${depth}|${perspective}|${color}|${board._fen}`;
+    }
+
+    function moveOrderScore(board, move) {
+      let score = 0;
+      if (move.capturedType) {
+        score += (PIECE_VALUES[move.capturedType] || 0) * 10 - (PIECE_VALUES[move.pieceType] || 0);
+      }
+      if (move.promotion) score += PIECE_VALUES[move.promotion] || PIECE_VALUES.q;
+      const next = rules.applyMove(board, move);
+      const chess = getChess(next);
+      if (chess.isCheckmate()) score += MATE_SCORE;
+      else if (chess.isCheck()) score += 75;
+      return score;
+    }
+
+    function orderMoves(board, moves) {
+      return moves
+        .map((move) => ({ move, score: moveOrderScore(board, move) }))
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => entry.move);
+    }
+
+    function minimax(board, color, depth, alpha, beta, perspective, cache) {
+      const cacheKey = searchCacheKey(board, color, depth, perspective);
+      const cached = cache.get(cacheKey);
+      if (cached !== undefined) return cached;
+
+      const terminal = terminalScore(board, color, depth, perspective);
+      if (terminal !== null) {
+        cache.set(cacheKey, terminal);
+        return terminal;
+      }
+      if (depth === 0) {
+        const score = evaluateBoard(board, perspective);
+        cache.set(cacheKey, score);
+        return score;
+      }
+
+      const moves = rules.getAllMoves(board, color);
+      if (!moves.length) return 0;
+      const orderedMoves = orderMoves(board, moves);
+      const nextColor = rules.opponent(color);
+
+      if (color === perspective) {
+        let value = -Infinity;
+        let searchedEveryMove = true;
+        for (const move of orderedMoves) {
+          value = Math.max(value, minimax(rules.applyMove(board, move), nextColor, depth - 1, alpha, beta, perspective, cache));
+          alpha = Math.max(alpha, value);
+          if (alpha >= beta) {
+            searchedEveryMove = false;
+            break;
+          }
+        }
+        if (searchedEveryMove) cache.set(cacheKey, value);
+        return value;
+      }
+
+      let value = Infinity;
+      let searchedEveryMove = true;
+      for (const move of orderedMoves) {
+        value = Math.min(value, minimax(rules.applyMove(board, move), nextColor, depth - 1, alpha, beta, perspective, cache));
+        beta = Math.min(beta, value);
+        if (alpha >= beta) {
+          searchedEveryMove = false;
+          break;
+        }
+      }
+      if (searchedEveryMove) cache.set(cacheKey, value);
+      return value;
+    }
+
+    function chooseSearchMove(board, moves, depth, color) {
+      const cache = new Map();
+      let bestScore = -Infinity;
+      let best = [];
+      for (const move of orderMoves(board, moves)) {
+        const next = rules.applyMove(board, move);
+        const score = minimax(next, rules.opponent(color), depth - 1, -Infinity, Infinity, color, cache);
+        if (score > bestScore) {
+          bestScore = score;
+          best = [move];
+        } else if (score === bestScore) {
+          best.push(move);
+        }
+      }
+      return randomMove(best);
+    }
+
+    function chooseComputerMove(state) {
+      const moves = rules.getAllMoves(state.board, state.turn, state.chainFrom);
+      if (!moves.length) return null;
+      if (state.level === "easy") return randomMove(moves);
+      if (state.level === "medium") return chooseByHeuristic(state.board, moves, state.turn);
+      return chooseSearchMove(state.board, moves, SEARCH_DEPTHS[state.level] || SEARCH_DEPTHS.hard, state.turn);
     }
 
     return {

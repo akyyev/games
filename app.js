@@ -286,6 +286,7 @@ function syncGameMetadata() {
   }
   document.querySelectorAll("[data-game-rule-index]").forEach((element) => {
     const key = activeGame.rulesKeys?.[Number(element.dataset.gameRuleIndex)];
+    element.hidden = !key;
     if (key) element.dataset.i18n = key;
   });
   document.querySelectorAll("[data-game-title]").forEach((element) => {
@@ -318,6 +319,10 @@ function getTurnClass(color) {
 function createPieceElement(piece, extraClasses = []) {
   const pieceEl = document.createElement("span");
   pieceEl.className = getPieceClasses(piece, extraClasses);
+  if (gameUi.getPieceMarkup) {
+    pieceEl.innerHTML = gameUi.getPieceMarkup(piece);
+    return pieceEl;
+  }
   if (gameUi.getPieceText) pieceEl.textContent = gameUi.getPieceText(piece);
   return pieceEl;
 }
@@ -326,13 +331,33 @@ function getCheckedKingSquare() {
   return gameUi.getCheckedKingSquare ? gameUi.getCheckedKingSquare(state.board, state.turn) : null;
 }
 
-function createGamePreview() {
+function createPreviewPieceElement(game, piece) {
+  const ui = game.ui || {};
+  const pieceEl = document.createElement("span");
+  const classes = ui.getPieceClasses
+    ? ui.getPieceClasses(piece)
+    : ["piece", piece.color, piece.king ? "king" : ""].filter(Boolean);
+  pieceEl.className = classes.filter(Boolean).join(" ");
+  if (ui.getPieceMarkup) {
+    pieceEl.innerHTML = ui.getPieceMarkup(piece);
+  } else if (ui.getPieceText) {
+    pieceEl.textContent = ui.getPieceText(piece);
+  }
+  return pieceEl;
+}
+
+function createGamePreview(game) {
   const preview = document.createElement("span");
-  preview.className = "game-choice-preview";
+  preview.className = `game-choice-preview ${game.id ? `is-${game.id}` : ""}`;
   preview.setAttribute("aria-hidden", "true");
+  const previewPieces = new Map((game.ui?.previewPieces || []).map((item) => [`${item.row},${item.col}`, item.piece]));
   for (let index = 0; index < 16; index += 1) {
+    const row = Math.floor(index / 4);
+    const col = index % 4;
     const square = document.createElement("span");
-    square.className = (Math.floor(index / 4) + index) % 2 === 0 ? "light" : "dark";
+    square.className = (row + col) % 2 === 0 ? "light" : "dark";
+    const piece = previewPieces.get(`${row},${col}`);
+    if (piece) square.append(createPreviewPieceElement(game, piece));
     preview.append(square);
   }
   return preview;
@@ -358,7 +383,7 @@ function createGameChoice({ id, titleKey, unavailable = false }) {
   action.className = "game-choice-action";
   action.textContent = unavailable ? t("gameComingSoon") : t(id === state.gameId ? "gameCurrent" : "gamePlay");
 
-  button.append(createGamePreview(), text, action);
+  button.append(createGamePreview(games[id] || { id }), text, action);
   return button;
 }
 
@@ -892,7 +917,7 @@ function handleSquareClick(row, col) {
   }
 
   const allMoves = getAllMoves(state.board, state.turn, state.chainFrom);
-  const forcedCapture = allMoves.some((move) => move.captures.length);
+  const forcedCapture = hasForcedCaptureRule() && allMoves.some((move) => move.captures.length);
   if (!piece || piece.color !== state.turn) return;
   if (state.chainFrom && !sameSquare(state.chainFrom, { row, col })) {
     state.captureHint = true;
@@ -912,11 +937,15 @@ function handleSquareClick(row, col) {
   state.captureHint = false;
   state.selected = { row, col };
   state.legalMoves = pieceMoves;
-  render(pieceMoves[0].captures.length ? "captureRequired" : "chooseLanding");
+  render(hasForcedCaptureRule() && pieceMoves[0].captures.length ? "captureRequired" : "chooseLanding");
 }
 
 function isComputerTurn() {
   return state.mode === "computer" && state.turn === computerColor();
+}
+
+function hasForcedCaptureRule() {
+  return Boolean(gameUi.forcedCapture);
 }
 
 function scheduleComputerMove() {
@@ -1203,13 +1232,9 @@ function getPromotionLabel(move) {
   }[move.promotion] || "promotionQueen";
 }
 
-function getPromotionSymbol(move) {
+function getPromotionMarkup(move) {
   const color = state.board[move.from.row]?.[move.from.col]?.color || state.turn;
-  const symbols = {
-    white: { q: "♕", r: "♖", b: "♗", n: "♘" },
-    black: { q: "♛", r: "♜", b: "♝", n: "♞" },
-  };
-  return symbols[color]?.[move.promotion] || "";
+  return gameUi.getPieceMarkup ? gameUi.getPieceMarkup({ color, type: move.promotion }) : "";
 }
 
 function openPromotionOverlay(moves) {
@@ -1224,7 +1249,7 @@ function openPromotionOverlay(moves) {
     button.className = "promotion-choice";
     button.dataset.promotion = move.promotion;
     button.setAttribute("aria-label", t(getPromotionLabel(move)));
-    button.innerHTML = `<span aria-hidden="true">${getPromotionSymbol(move)}</span><small>${t(getPromotionLabel(move))}</small>`;
+    button.innerHTML = `<span class="promotion-piece" aria-hidden="true">${getPromotionMarkup(move)}</span><small>${t(getPromotionLabel(move))}</small>`;
     fragment.append(button);
   }
   promotionChoices.replaceChildren(fragment);
@@ -1285,7 +1310,7 @@ function render(messageKey = "", messageParams = {}) {
   document.body.dataset.turn = winner || draw ? "neutral" : state.turn;
   document.body.dataset.turnOwner = turnOwner;
   const moves = winner || draw ? [] : getAllMoves(state.board, state.turn, state.chainFrom);
-  const forcedCapture = moves.some((move) => move.captures.length);
+  const forcedCapture = hasForcedCaptureRule() && moves.some((move) => move.captures.length);
   const checkedKingSquare = winner || draw ? null : getCheckedKingSquare();
   const selectedMoves = state.selected
     ? moves.filter((move) => sameSquare(move.from, state.selected))
@@ -1566,12 +1591,6 @@ joinRoomBtn.addEventListener("click", () => {
 });
 roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = normalizeRoomId(roomCodeInput.value);
-});
-document.querySelector("#flipBtn").addEventListener("click", () => {
-  unlockAudio();
-  state.flipped = !state.flipped;
-  savePreferences();
-  render("boardFlipped");
 });
 
 applyPreferences();
