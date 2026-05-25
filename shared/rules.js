@@ -104,6 +104,7 @@
   function getKingCaptures(board, row, col, color) {
     const moves = [];
     for (const [dr, dc] of directions) {
+      const landings = [];
       let r = row + dr;
       let c = col + dc;
       let target = null;
@@ -113,7 +114,7 @@
           if (piece.color === color || target) break;
           target = { row: r, col: c };
         } else if (target) {
-          moves.push({
+          landings.push({
             from: { row, col },
             to: { row: r, col: c },
             captures: [target],
@@ -122,6 +123,11 @@
         r += dr;
         c += dc;
       }
+      const continuingLandings = landings.filter((move) => {
+        const next = applyMove(board, move);
+        return getCaptureMovesForPiece(next, move.to.row, move.to.col).length > 0;
+      });
+      moves.push(...(continuingLandings.length ? continuingLandings : landings));
     }
     return moves;
   }
