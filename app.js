@@ -675,6 +675,21 @@ function cloneLog(log) {
   return log.map((entry) => ({ ...entry }));
 }
 
+function attachBoardFen(board, fen) {
+  if (!fen) return board;
+  Object.defineProperty(board, "_fen", {
+    value: fen,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+  return board;
+}
+
+function cloneOnlineBoard(room) {
+  return attachBoardFen(cloneBoard(room.board), room.fen);
+}
+
 function createSnapshot(source = "player") {
   return {
     source,
@@ -1077,7 +1092,7 @@ function applyOnlineState(room, color) {
     modeSelect.value = "online";
     switchedGame = true;
   }
-  const previousBoard = switchedGame ? cloneBoard(room.board) : cloneBoard(state.board);
+  const previousBoard = switchedGame ? cloneOnlineBoard(room) : cloneBoard(state.board);
   const hadMove = room.lastMove?.length;
   const previousLastMove = state.lastMove.map(clonePoint);
   state.online.connected = true;
@@ -1086,7 +1101,7 @@ function applyOnlineState(room, color) {
   state.playerColor = color;
   sideSelect.value = color;
   state.flipped = color === BLACK;
-  state.board = cloneBoard(room.board);
+  state.board = cloneOnlineBoard(room);
   state.turn = room.turn;
   state.chainFrom = clonePoint(room.chainFrom);
   state.lastMove = (room.lastMove || []).map(clonePoint);

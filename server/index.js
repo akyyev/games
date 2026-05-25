@@ -91,6 +91,7 @@ function serializeRoom(room) {
     id: room.id,
     gameId: room.gameId,
     board: room.board,
+    fen: room.board._fen || null,
     turn: room.turn,
     chainFrom: room.chainFrom,
     lastMove: room.lastMove,
