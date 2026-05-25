@@ -2,8 +2,11 @@
   const MATE_SCORE = 100000;
   const SEARCH_DEPTHS = {
     hard: 2,
-    "extra-hard": 3,
+    "extra-hard": 5,
   };
+  const HARD_TIME_MS = 350;
+  const EXTRA_HARD_TIME_MS = 900;
+  const QUIESCENCE_DEPTH = 4;
   const PIECE_VALUES = {
     p: 100,
     n: 320,
@@ -113,6 +116,17 @@
       return moves[Math.floor(Math.random() * moves.length)];
     }
 
+    function now() {
+      return global.performance?.now ? global.performance.now() : Date.now();
+    }
+
+    function isTimedOut(context) {
+      if (!context?.deadline) return false;
+      if (now() <= context.deadline) return false;
+      context.timedOut = true;
+      return true;
+    }
+
     function pieceSquareValue(piece, row, col) {
       const table = PIECE_TABLES[piece.type];
       if (!table) return 0;
@@ -134,11 +148,25 @@
       return score;
     }
 
+    function moveAttacksSquare(board, move, square) {
+      return move.to.row === square.row && move.to.col === square.col;
+    }
+
+    function movedPieceHangingPenalty(board, move, color) {
+      const movedPieceValue = PIECE_VALUES[move.promotion || move.pieceType] || 0;
+      if (!movedPieceValue) return 0;
+
+      const replies = rules.getAllMoves(board, rules.opponent(color));
+      const canCaptureMovedPiece = replies.some((reply) => moveAttacksSquare(board, reply, move.to));
+      return canCaptureMovedPiece ? movedPieceValue * 1.15 : 0;
+    }
+
     function evaluateMove(board, move, color) {
       const next = rules.applyMove(board, move);
       const capture = move.capturedType ? (PIECE_VALUES[move.capturedType] || 0) * 1.4 : 0;
       const promotion = move.promotion ? PIECE_VALUES[move.promotion] || PIECE_VALUES.q : 0;
-      return evaluateBoard(next, color) + capture + promotion;
+      const hangingPenalty = movedPieceHangingPenalty(next, move, color);
+      return evaluateBoard(next, color) + capture + promotion - hangingPenalty;
     }
 
     function chooseByHeuristic(board, moves, color) {
@@ -179,6 +207,10 @@
       return `${depth}|${perspective}|${color}|${board._fen}`;
     }
 
+    function moveGivesCheck(board, move) {
+      return getChess(rules.applyMove(board, move)).isCheck();
+    }
+
     function moveOrderScore(board, move) {
       let score = 0;
       if (move.capturedType) {
@@ -199,20 +231,68 @@
         .map((entry) => entry.move);
     }
 
-    function minimax(board, color, depth, alpha, beta, perspective, cache) {
+    function getQuiescenceMoves(board, color) {
+      const moves = rules.getAllMoves(board, color);
+      if (getChess(board).isCheck()) return moves;
+      return moves.filter((move) => move.capturedType || move.promotion || moveGivesCheck(board, move));
+    }
+
+    function quiescence(board, color, alpha, beta, perspective, cache, depth, context) {
+      if (isTimedOut(context)) return evaluateBoard(board, perspective);
+
+      const terminal = terminalScore(board, color, depth, perspective);
+      if (terminal !== null) return terminal;
+
+      const inCheck = getChess(board).isCheck();
+      const standingPat = evaluateBoard(board, perspective);
+      if (depth === 0 && !inCheck) return standingPat;
+      if (depth === 0 && inCheck) return color === perspective ? -MATE_SCORE : MATE_SCORE;
+
+      const quiescenceMoves = orderMoves(board, getQuiescenceMoves(board, color));
+      if (inCheck && !quiescenceMoves.length) {
+        return color === perspective ? -MATE_SCORE - depth : MATE_SCORE + depth;
+      }
+
+      if (color === perspective) {
+        let value = inCheck ? -Infinity : standingPat;
+        if (!inCheck) {
+          if (value >= beta) return value;
+          alpha = Math.max(alpha, value);
+        }
+        for (const move of quiescenceMoves) {
+          value = Math.max(value, quiescence(rules.applyMove(board, move), rules.opponent(color), alpha, beta, perspective, cache, depth - 1, context));
+          alpha = Math.max(alpha, value);
+          if (alpha >= beta || context?.timedOut) break;
+        }
+        return value;
+      }
+
+      let value = inCheck ? Infinity : standingPat;
+      if (!inCheck) {
+        if (value <= alpha) return value;
+        beta = Math.min(beta, value);
+      }
+      for (const move of quiescenceMoves) {
+        value = Math.min(value, quiescence(rules.applyMove(board, move), rules.opponent(color), alpha, beta, perspective, cache, depth - 1, context));
+        beta = Math.min(beta, value);
+        if (alpha >= beta || context?.timedOut) break;
+      }
+      return value;
+    }
+
+    function minimax(board, color, depth, alpha, beta, perspective, cache, context = null) {
+      if (isTimedOut(context)) return evaluateBoard(board, perspective);
       const cacheKey = searchCacheKey(board, color, depth, perspective);
       const cached = cache.get(cacheKey);
       if (cached !== undefined) return cached;
 
       const terminal = terminalScore(board, color, depth, perspective);
       if (terminal !== null) {
-        cache.set(cacheKey, terminal);
+        if (!context?.timedOut) cache.set(cacheKey, terminal);
         return terminal;
       }
       if (depth === 0) {
-        const score = evaluateBoard(board, perspective);
-        cache.set(cacheKey, score);
-        return score;
+        return quiescence(board, color, alpha, beta, perspective, cache, QUIESCENCE_DEPTH, context);
       }
 
       const moves = rules.getAllMoves(board, color);
@@ -224,38 +304,39 @@
         let value = -Infinity;
         let searchedEveryMove = true;
         for (const move of orderedMoves) {
-          value = Math.max(value, minimax(rules.applyMove(board, move), nextColor, depth - 1, alpha, beta, perspective, cache));
+          value = Math.max(value, minimax(rules.applyMove(board, move), nextColor, depth - 1, alpha, beta, perspective, cache, context));
           alpha = Math.max(alpha, value);
-          if (alpha >= beta) {
+          if (alpha >= beta || context?.timedOut) {
             searchedEveryMove = false;
             break;
           }
         }
-        if (searchedEveryMove) cache.set(cacheKey, value);
+        if (searchedEveryMove && !context?.timedOut) cache.set(cacheKey, value);
         return value;
       }
 
       let value = Infinity;
       let searchedEveryMove = true;
       for (const move of orderedMoves) {
-        value = Math.min(value, minimax(rules.applyMove(board, move), nextColor, depth - 1, alpha, beta, perspective, cache));
+        value = Math.min(value, minimax(rules.applyMove(board, move), nextColor, depth - 1, alpha, beta, perspective, cache, context));
         beta = Math.min(beta, value);
-        if (alpha >= beta) {
+        if (alpha >= beta || context?.timedOut) {
           searchedEveryMove = false;
           break;
         }
       }
-      if (searchedEveryMove) cache.set(cacheKey, value);
+      if (searchedEveryMove && !context?.timedOut) cache.set(cacheKey, value);
       return value;
     }
 
-    function chooseSearchMove(board, moves, depth, color) {
+    function chooseSearchMove(board, moves, depth, color, context = null) {
       const cache = new Map();
       let bestScore = -Infinity;
       let best = [];
       for (const move of orderMoves(board, moves)) {
         const next = rules.applyMove(board, move);
-        const score = minimax(next, rules.opponent(color), depth - 1, -Infinity, Infinity, color, cache);
+        const score = minimax(next, rules.opponent(color), depth - 1, -Infinity, Infinity, color, cache, context);
+        if (context?.timedOut) break;
         if (score > bestScore) {
           bestScore = score;
           best = [move];
@@ -263,7 +344,22 @@
           best.push(move);
         }
       }
-      return randomMove(best);
+      return { move: best.length ? randomMove(best) : null, score: bestScore, timedOut: Boolean(context?.timedOut) };
+    }
+
+    function chooseTimedSearchMove(board, moves, maxDepth, color, timeMs) {
+      const immediateMates = moves.filter((move) => getChess(rules.applyMove(board, move)).isCheckmate());
+      if (immediateMates.length) return randomMove(immediateMates);
+
+      let bestMove = chooseByHeuristic(board, moves, color);
+      const context = { deadline: now() + timeMs, timedOut: false };
+      for (let depth = 1; depth <= maxDepth; depth += 1) {
+        const result = chooseSearchMove(board, moves, depth, color, context);
+        if (result.move && !result.timedOut) bestMove = result.move;
+        if (result.score >= MATE_SCORE - maxDepth) return bestMove;
+        if (context.timedOut) break;
+      }
+      return bestMove;
     }
 
     function chooseComputerMove(state) {
@@ -271,7 +367,10 @@
       if (!moves.length) return null;
       if (state.level === "easy") return randomMove(moves);
       if (state.level === "medium") return chooseByHeuristic(state.board, moves, state.turn);
-      return chooseSearchMove(state.board, moves, SEARCH_DEPTHS[state.level] || SEARCH_DEPTHS.hard, state.turn);
+      if (state.level === "extra-hard") {
+        return chooseTimedSearchMove(state.board, moves, SEARCH_DEPTHS["extra-hard"], state.turn, EXTRA_HARD_TIME_MS);
+      }
+      return chooseTimedSearchMove(state.board, moves, SEARCH_DEPTHS.hard, state.turn, HARD_TIME_MS);
     }
 
     return {
