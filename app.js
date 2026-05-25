@@ -90,6 +90,7 @@ const state = {
 
 let audioContext = null;
 let computerTimer = null;
+let computerMoveToken = 0;
 let animationTimer = null;
 
 const boardEl = document.querySelector("#board");
@@ -440,6 +441,7 @@ function resetGame() {
   if (state.mode === "online") closeOnlineSocket();
   if (computerTimer) window.clearTimeout(computerTimer);
   computerTimer = null;
+  computerMoveToken += 1;
   if (animationTimer) window.clearTimeout(animationTimer);
   animationTimer = null;
   state.board = createInitialBoard();
@@ -966,19 +968,36 @@ function hasForcedCaptureRule() {
 function scheduleComputerMove() {
   state.busy = true;
   render("thinking");
+  const token = ++computerMoveToken;
   computerTimer = window.setTimeout(() => {
     computerTimer = null;
-    const move = chooseComputerMove();
-    state.busy = false;
-    if (move) makeMove(move, "computer");
-    else render();
+    Promise.resolve(chooseComputerMove()).then((move) => {
+      if (token !== computerMoveToken) return;
+      state.busy = false;
+      if (move) makeMove(move, "computer");
+      else render();
+    }).catch(() => {
+      if (token !== computerMoveToken) return;
+      state.busy = false;
+      render();
+    });
   }, 420);
 }
 
-function undoMove() {
+function cancelComputerMove() {
+  computerMoveToken += 1;
   if (computerTimer) {
     window.clearTimeout(computerTimer);
     computerTimer = null;
+  }
+  if (state.busy && state.mode === "computer") state.busy = false;
+}
+
+function undoMove() {
+  if (computerTimer || (state.busy && state.mode === "computer")) {
+    cancelComputerMove();
+    render();
+    return;
   }
 
   if (!state.history.length) {

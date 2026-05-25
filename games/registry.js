@@ -55,7 +55,9 @@ window.GAMES = {
     },
     rulesKeys: ["chessRuleMove", "chessRuleCheck", "chessRuleCastle", "chessRulePromotion", "chessRuleDraws"],
     rules: window.ChessRules,
-    engine: window.ChessEngine,
+    engine: window.createStockfishAdapter
+      ? window.createStockfishAdapter(window.ChessRules, window.ChessEngine)
+      : window.ChessEngine,
     ui: {
       boardSize: 8,
       previewPieces: [

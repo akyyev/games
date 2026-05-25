@@ -1,12 +1,14 @@
-# Russian Checkers
+# Board Games
 
-A browser-based Russian checkers game with local play, computer play, and online rooms.
+A browser-based board game app with checkers, chess, local play, computer play, and online rooms.
 
 ## Features
 
 - Russian draughts rules with forced captures, capture chains, flying kings, and crowning
+- Chess rules powered by `chess.js`
 - Game modes: Local two-player, Play vs computer, Online match
 - Computer levels: Beginner, Club Player, Master, Grandmaster
+- Chess computer mode uses Stockfish in a browser Web Worker, with a random legal move fallback if the engine cannot load
 - Online rooms with room codes, copy code, and shareable links
 - Clear online states for unavailable server, expired rooms, full rooms, missing rooms, and disconnected opponents
 - English, Russian, and Turkish translations
@@ -16,7 +18,7 @@ A browser-based Russian checkers game with local play, computer play, and online
 - Win and draw overlays with final score
 - Draw handling for repeated positions, 1 king vs 1 king, and 2 kings vs 1 king after 10 full moves
 - Saved local preferences for mode, side, level, language, style, board flip, and sounds
-- Checkers rules are isolated under `games/checkers/` so other board games can be added later
+- Game rules are isolated under `games/` so each game can own its rules and engine logic
 
 ## Run Locally
 
@@ -86,14 +88,20 @@ Note: free hosting services may sleep when inactive. Use an always-on plan if on
 ├── config.js
 ├── games/
 │   ├── registry.js
-│   └── checkers/
+│   ├── checkers/
 │       ├── engine.js
 │       └── rules.js
+│   └── chess/
+│       ├── engine.js
+│       ├── rules.js
+│       └── stockfish-adapter.js
 ├── i18n/
+├── vendor/
 ├── server/
 └── README.md
 ```
 
-## Multi-Game Direction
+## Licenses
 
-The app is starting to separate game-specific logic from the shared shell. `games/registry.js` defines available games, and Checkers rules/engine logic live in `games/checkers/`. Future chess work can start in `games/chess/` while reusing the existing UI shell, translations, sound, themes, and online-room concepts where they fit.
+- Stockfish.js is GPL-3.0; see `vendor/stockfish/COPYING.txt`.
+- `chess.js` and chess piece assets keep their license files under `vendor/`.
