@@ -67,7 +67,7 @@ window.GAMES = {
       modeSupport: {
         human: true,
         computer: true,
-        online: false,
+        online: true,
       },
       isDarkSquare(row, col) {
         return window.ChessRules.isDark(row, col);

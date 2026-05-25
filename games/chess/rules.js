@@ -139,6 +139,10 @@
     return a && b && a.row === b.row && a.col === b.col;
   }
 
+  function sameMove(a, b) {
+    return sameSquare(a.from, b.from) && sameSquare(a.to, b.to) && (a.promotion || null) === (b.promotion || null);
+  }
+
   const api = {
     SIZE,
     WHITE,
@@ -152,6 +156,7 @@
     getAllMoves,
     applyMove,
     sameSquare,
+    sameMove,
     pointToSquare,
     squareToPoint,
     findKing,

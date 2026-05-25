@@ -1,11 +1,40 @@
 const http = require("http");
 const { WebSocketServer } = require("ws");
-const rules = require("../games/checkers/rules.js");
 
+global.window = global;
+require("../vendor/chess.js/chess.global.js");
+
+const checkersRules = require("../games/checkers/rules.js");
+const { createCheckersEngine } = require("../games/checkers/engine.js");
+const chessRules = require("../games/chess/rules.js");
+const createChessEngine = require("../games/chess/engine.js");
+
+const games = {
+  checkers: {
+    id: "checkers",
+    rules: checkersRules,
+    engine: createCheckersEngine(checkersRules),
+  },
+  chess: {
+    id: "chess",
+    rules: chessRules,
+    engine: createChessEngine(chessRules),
+  },
+};
+
+const DEFAULT_GAME_ID = "checkers";
 const PORT = process.env.PORT || 10000;
 const ROOM_TTL_MS = Number(process.env.ROOM_TTL_MS || 60 * 60 * 1000);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS || 5 * 60 * 1000);
 const rooms = new Map();
+
+function getGame(gameId = DEFAULT_GAME_ID) {
+  return games[gameId] || games[DEFAULT_GAME_ID];
+}
+
+function normalizeGameId(gameId) {
+  return games[gameId]?.id || DEFAULT_GAME_ID;
+}
 
 function createRoomId() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -16,26 +45,30 @@ function createRoomId() {
   return id;
 }
 
-function coord({ row, col }) {
+function coord(rules, { row, col }) {
   return `${String.fromCharCode(97 + col)}${rules.SIZE - row}`;
 }
 
-function logMove(color, wasKing, move, continues) {
+function logMove(room, color, wasKing, move, continues) {
   return {
     color,
     wasKing,
-    from: coord(move.from),
-    to: coord(move.to),
+    notation: move.san,
+    from: coord(room.game.rules, move.from),
+    to: coord(room.game.rules, move.to),
     mark: move.captures.length ? "x" : "-",
     continues,
   };
 }
 
-function createRoom() {
+function createRoom(gameId = DEFAULT_GAME_ID) {
+  const game = getGame(normalizeGameId(gameId));
   const room = {
     id: createRoomId(),
-    board: rules.createInitialBoard(),
-    turn: rules.WHITE,
+    gameId: game.id,
+    game,
+    board: game.rules.createInitialBoard(),
+    turn: game.rules.WHITE,
     chainFrom: null,
     lastMove: [],
     log: [],
@@ -47,7 +80,7 @@ function createRoom() {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-  room.positionHistory = [positionKey(room.board, room.turn, room.chainFrom)];
+  room.positionHistory = [game.engine.positionKey(room.board, room.turn, room.chainFrom)];
   rooms.set(room.id, room);
   return room;
 }
@@ -56,12 +89,13 @@ function serializeRoom(room) {
   const players = [...room.players.values()];
   return {
     id: room.id,
+    gameId: room.gameId,
     board: room.board,
     turn: room.turn,
     chainFrom: room.chainFrom,
     lastMove: room.lastMove,
     log: room.log,
-    winner: room.draw ? null : rules.getWinner(room.board, room.turn, room.chainFrom),
+    winner: room.game.engine.getWinner(room.board, room.turn, room.chainFrom, room.draw),
     draw: room.draw,
     twoKingsVsOneHalfMoves: room.twoKingsVsOneHalfMoves,
     rematchVotes: Object.fromEntries(room.rematchVotes),
@@ -102,11 +136,16 @@ function syncRoom(room) {
   }
 }
 
+function normalizeColor(room, color) {
+  return color === room.game.rules.WHITE || color === room.game.rules.BLACK ? color : null;
+}
+
 function joinRoom(ws, room, preferredColor = null) {
+  const rules = room.game.rules;
   const isAlreadyInRoom = room.players.has(ws);
   const players = [...room.players.entries()];
   const taken = new Set(players.map(([, color]) => color));
-  const requestedColor = normalizeColor(preferredColor);
+  const requestedColor = normalizeColor(room, preferredColor);
   if (preferredColor && !requestedColor) {
     sendError(ws, "invalid_color", "Invalid color.");
     return;
@@ -135,10 +174,6 @@ function joinRoom(ws, room, preferredColor = null) {
   syncRoom(room);
 }
 
-function normalizeColor(color) {
-  return color === rules.WHITE || color === rules.BLACK ? color : null;
-}
-
 function leaveCurrentRoom(ws) {
   const room = rooms.get(ws.roomId);
   if (!room) return;
@@ -157,7 +192,8 @@ function leaveCurrentRoom(ws) {
 function handleMove(ws, payload) {
   const room = rooms.get(ws.roomId);
   if (!room) return sendError(ws, "room_not_found", "Room not found.");
-  if (room.draw || rules.getWinner(room.board, room.turn, room.chainFrom)) {
+  const { rules, engine } = room.game;
+  if (room.draw || engine.getWinner(room.board, room.turn, room.chainFrom, room.draw)) {
     return sendError(ws, "game_over", "Game is over.");
   }
 
@@ -177,24 +213,25 @@ function handleMove(ws, payload) {
   const continuedCaptures = legalMove.captures.length
     ? rules.getCaptureMovesForPiece(room.board, legalMove.to.row, legalMove.to.col)
     : [];
-  room.log.unshift(logMove(piece.color, piece.king, legalMove, continuedCaptures.length > 0));
+  room.log.unshift(logMove(room, piece.color, piece.king, legalMove, continuedCaptures.length > 0));
 
   if (continuedCaptures.length) {
     room.chainFrom = { ...legalMove.to };
   } else {
     room.chainFrom = null;
     room.turn = rules.opponent(room.turn);
-    recordCurrentPosition(room);
+    engine.recordCurrentPosition(room);
   }
 
   syncRoom(room);
 }
 
 function isGameOver(room) {
-  return room.draw || rules.getWinner(room.board, room.turn, room.chainFrom);
+  return room.draw || room.game.engine.getWinner(room.board, room.turn, room.chainFrom, room.draw);
 }
 
 function resetRoomForRematch(room) {
+  const { rules, engine } = room.game;
   room.board = rules.createInitialBoard();
   room.turn = rules.WHITE;
   room.chainFrom = null;
@@ -202,37 +239,8 @@ function resetRoomForRematch(room) {
   room.log = [];
   room.draw = false;
   room.twoKingsVsOneHalfMoves = 0;
-  room.positionHistory = [positionKey(room.board, room.turn, room.chainFrom)];
+  room.positionHistory = [engine.positionKey(room.board, room.turn, room.chainFrom)];
   room.rematchVotes.clear();
-}
-
-function positionKey(board = rules.createInitialBoard(), turn = rules.WHITE, chainFrom = null) {
-  const pieces = [];
-  for (let row = 0; row < rules.SIZE; row += 1) {
-    for (let col = 0; col < rules.SIZE; col += 1) {
-      const piece = board[row][col];
-      if (piece) pieces.push(`${row}${col}${piece.color[0]}${piece.king ? "K" : "M"}`);
-    }
-  }
-  const chain = chainFrom ? `${chainFrom.row}${chainFrom.col}` : "-";
-  return `${turn}|${chain}|${pieces.join(",")}`;
-}
-
-function countPositionOccurrences(room, key) {
-  return room.positionHistory.filter((position) => position === key).length;
-}
-
-function recordCurrentPosition(room) {
-  const key = positionKey(room.board, room.turn, room.chainFrom);
-  room.positionHistory.push(key);
-  updateTwoKingsVsOneCounter(room);
-  if (
-    countPositionOccurrences(room, key) >= 3 ||
-    hasInsufficientWinningMaterial(room.board, room.turn, room.chainFrom) ||
-    room.twoKingsVsOneHalfMoves >= 20
-  ) {
-    room.draw = true;
-  }
 }
 
 function sendRematchStatus(room, voterColor, accepted) {
@@ -286,62 +294,15 @@ function handleRematch(ws, payload) {
   sendRematchStatus(room, color, accepted);
 }
 
-function getPieceCounts(board) {
-  const counts = { [rules.WHITE]: 0, [rules.BLACK]: 0 };
-  for (const row of board) {
-    for (const piece of row) {
-      if (piece) counts[piece.color] += 1;
-    }
-  }
-  return counts;
-}
-
-function getKingCounts(board) {
-  const counts = { [rules.WHITE]: 0, [rules.BLACK]: 0 };
-  for (const row of board) {
-    for (const piece of row) {
-      if (piece?.king) counts[piece.color] += 1;
-    }
-  }
-  return counts;
-}
-
-function isTwoKingsVsOneKingEndgame(board) {
-  const pieceCounts = getPieceCounts(board);
-  if (pieceCounts[rules.WHITE] + pieceCounts[rules.BLACK] !== 3) return false;
-  const kingCounts = getKingCounts(board);
-  return (
-    pieceCounts[rules.WHITE] === kingCounts[rules.WHITE] &&
-    pieceCounts[rules.BLACK] === kingCounts[rules.BLACK] &&
-    ((kingCounts[rules.WHITE] === 2 && kingCounts[rules.BLACK] === 1) ||
-      (kingCounts[rules.WHITE] === 1 && kingCounts[rules.BLACK] === 2))
-  );
-}
-
-function hasInsufficientWinningMaterial(board, turn, chainFrom) {
-  const pieces = board.flat().filter(Boolean);
-  if (pieces.length !== 2 || pieces.some((piece) => !piece.king)) return false;
-  const colors = new Set(pieces.map((piece) => piece.color));
-  return colors.size === 2 && !rules.getAllMoves(board, turn, chainFrom).some((move) => move.captures.length);
-}
-
-function updateTwoKingsVsOneCounter(room) {
-  if (isTwoKingsVsOneKingEndgame(room.board)) {
-    room.twoKingsVsOneHalfMoves += 1;
-  } else {
-    room.twoKingsVsOneHalfMoves = 0;
-  }
-}
-
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size, games: Object.keys(games) }));
     return;
   }
 
   res.writeHead(200, { "content-type": "text/plain" });
-  res.end("Russian Checkers online server is running.\n");
+  res.end("Board games online server is running.\n");
 });
 
 const wss = new WebSocketServer({ server });
@@ -356,7 +317,7 @@ wss.on("connection", (ws) => {
     }
 
     if (message.type === "create") {
-      const room = createRoom();
+      const room = createRoom(message.gameId);
       joinRoom(ws, room, message.preferredColor);
       return;
     }
@@ -401,5 +362,5 @@ function cleanupIdleRooms() {
 setInterval(cleanupIdleRooms, ROOM_CLEANUP_INTERVAL_MS).unref();
 
 server.listen(PORT, () => {
-  console.log(`Russian Checkers online server listening on ${PORT}`);
+  console.log(`Board games online server listening on ${PORT}`);
 });

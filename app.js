@@ -501,12 +501,12 @@ function resetOnlineLocalState() {
   promotionOverlay.hidden = true;
 }
 
-function setActiveGame(gameId, { reset = true, persist = true } = {}) {
+function setActiveGame(gameId, { reset = true, persist = true, closeOnline = true } = {}) {
   const nextGame = games[gameId] || games[window.DEFAULT_GAME_ID] || games.checkers;
   if (!nextGame?.id) return false;
   if (nextGame.id === state.gameId) return true;
 
-  if (state.mode === "online") closeOnlineSocket();
+  if (closeOnline && state.mode === "online") closeOnlineSocket();
   bindActiveGame(nextGame.id);
   state.gameId = activeGame.id;
   state.mode = normalizeModeForGame(state.mode);
@@ -1022,7 +1022,7 @@ function connectOnline(action, roomId = "") {
 
   socket.addEventListener("open", () => {
     if (state.online.socket !== socket) return;
-    socket.send(JSON.stringify({ type: action, roomId: normalizedRoomId, preferredColor: sideSelect.value }));
+    socket.send(JSON.stringify({ type: action, roomId: normalizedRoomId, preferredColor: sideSelect.value, gameId: state.gameId }));
   });
 
   socket.addEventListener("message", (event) => {
@@ -1065,7 +1065,14 @@ function connectOnline(action, roomId = "") {
 }
 
 function applyOnlineState(room, color) {
-  const previousBoard = cloneBoard(state.board);
+  let switchedGame = false;
+  if (room.gameId && room.gameId !== state.gameId) {
+    setActiveGame(room.gameId, { reset: false, persist: true, closeOnline: false });
+    state.mode = "online";
+    modeSelect.value = "online";
+    switchedGame = true;
+  }
+  const previousBoard = switchedGame ? cloneBoard(room.board) : cloneBoard(state.board);
   const hadMove = room.lastMove?.length;
   const previousLastMove = state.lastMove.map(clonePoint);
   state.online.connected = true;
