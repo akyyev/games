@@ -1,5 +1,5 @@
 {
-  "name": "russian-checkers-online-server",
+  "name": "board-games-online-server",
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",

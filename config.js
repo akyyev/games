@@ -1,4 +1,4 @@
-window.CHECKERS_CONFIG = {
+window.BOARD_GAMES_CONFIG = {
   // Online mode needs a running WebSocket server.
   // Local testing: start `node server/index.js`, then use "ws://localhost:10000".
   // Production: deploy `server/` to a WebSocket-capable host and use its wss:// URL.

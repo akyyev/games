@@ -14,10 +14,10 @@ A browser-based board game app with checkers, chess, local play, computer play, 
 - English, Russian, and Turkish translations
 - Board themes: Classic wood, Tournament green, Midnight glass, Porcelain blue
 - Turn indicator rail that follows the board theme and board orientation
-- Move sounds, undo, board flip, move log, and animations
+- Move sounds, undo, move log, and animations
 - Win and draw overlays with final score
 - Draw handling for repeated positions, 1 king vs 1 king, and 2 kings vs 1 king after 10 full moves
-- Saved local preferences for mode, side, level, language, style, board flip, and sounds
+- Saved local preferences for mode, side, level, language, style, and sounds
 - Game rules are isolated under `games/` so each game can own its rules and engine logic
 
 ## Run Locally
@@ -89,8 +89,8 @@ Note: free hosting services may sleep when inactive. Use an always-on plan if on
 ├── games/
 │   ├── registry.js
 │   ├── checkers/
-│       ├── engine.js
-│       └── rules.js
+│   │   ├── engine.js
+│   │   └── rules.js
 │   └── chess/
 │       ├── engine.js
 │       ├── rules.js

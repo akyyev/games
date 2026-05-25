@@ -47,7 +47,8 @@ function bindActiveGame(gameId = window.DEFAULT_GAME_ID) {
 
 bindActiveGame();
 
-const PREFERENCES_KEY = "russian-checkers-preferences";
+const PREFERENCES_KEY = "board-games-preferences";
+const LEGACY_PREFERENCES_KEY = "russian-checkers-preferences";
 
 const translations = window.I18N || {};
 
@@ -144,7 +145,11 @@ copyrightYear.textContent = new Date().getFullYear();
 
 function loadPreferences() {
   try {
-    return JSON.parse(localStorage.getItem(PREFERENCES_KEY)) || {};
+    return (
+      JSON.parse(localStorage.getItem(PREFERENCES_KEY)) ||
+      JSON.parse(localStorage.getItem(LEGACY_PREFERENCES_KEY)) ||
+      {}
+    );
   } catch {
     return {};
   }
@@ -166,7 +171,6 @@ function savePreferences() {
     mode: state.mode,
     level: state.level,
     playerColor: state.playerColor,
-    flipped: state.flipped,
     boardStyle: state.boardStyle,
     soundEnabled: state.soundEnabled,
   };
@@ -227,11 +231,7 @@ function applyPreferences() {
   if (validColors.includes(preferences.playerColor)) state.playerColor = preferences.playerColor;
   if (validStyles.includes(preferences.boardStyle)) state.boardStyle = preferences.boardStyle;
   if (typeof preferences.soundEnabled === "boolean") state.soundEnabled = preferences.soundEnabled;
-  if (typeof preferences.flipped === "boolean") {
-    state.flipped = preferences.flipped;
-  } else if (state.mode === "computer") {
-    state.flipped = state.playerColor === BLACK;
-  }
+  if (state.mode === "computer") state.flipped = state.playerColor === BLACK;
 
   languageSelect.value = state.language;
   modeSelect.value = state.mode;
@@ -747,6 +747,18 @@ function canPromote(piece, move) {
   return !piece.king && move.to.row === crownRow;
 }
 
+function didMovePromote(previousBoard, nextBoard, from, to) {
+  const piece = previousBoard[from.row]?.[from.col];
+  const movedPiece = nextBoard[to.row]?.[to.col];
+  if (!piece || !movedPiece) return false;
+  if (gameUi.canPromote) {
+    return getAllMoves(previousBoard, piece.color)
+      .filter((move) => sameSquare(move.from, from) && sameSquare(move.to, to))
+      .some((move) => gameUi.canPromote(piece, move));
+  }
+  return Boolean(!piece.king && movedPiece.king);
+}
+
 function getCapturedPieces(move) {
   return move.captures.map((capture) => ({
     ...capture,
@@ -772,7 +784,7 @@ function animateAcceptedMove(previousBoard, room) {
     from: { ...from },
     to: { ...to },
     captures,
-    promote: !piece.king && room.board[to.row]?.[to.col]?.king,
+    promote: didMovePromote(previousBoard, room.board, from, to),
   };
 }
 
@@ -1037,7 +1049,7 @@ function closeOnlineSocket() {
 }
 
 function connectOnline(action, roomId = "") {
-  const url = window.CHECKERS_CONFIG?.WS_URL;
+  const url = (window.BOARD_GAMES_CONFIG || window.CHECKERS_CONFIG)?.WS_URL;
   const normalizedRoomId = normalizeRoomId(roomId);
   if (!url) {
     setOnlineStatus("onlineServerMissing");
@@ -1143,10 +1155,9 @@ function applyOnlineState(room, color) {
       !sameSquare(previousLastMove[0], room.lastMove[0]) ||
       !sameSquare(previousLastMove[1], room.lastMove[1]));
   if (hasNewMove) {
-    const movedPiece = room.board[room.lastMove[1].row]?.[room.lastMove[1].col];
     playMoveSound({
       capture: previousBoard.flat().filter(Boolean).length > room.board.flat().filter(Boolean).length,
-      promote: Boolean(movedPiece?.king && !previousBoard[room.lastMove[0].row]?.[room.lastMove[0].col]?.king),
+      promote: didMovePromote(previousBoard, room.board, room.lastMove[0], room.lastMove[1]),
       win: Boolean(room.winner),
     });
   }
