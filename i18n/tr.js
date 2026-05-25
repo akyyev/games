@@ -1,7 +1,7 @@
 window.I18N = window.I18N || {};
 
 window.I18N.tr = {
-  pageTitle: "Rus Daması",
+  pageTitle: "Masa Oyunları",
   gameAria: "Rus daması oyunu",
   pieceCountsAria: "Taş sayıları",
   boardAria: "Dama tahtası",

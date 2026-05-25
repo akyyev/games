@@ -1,7 +1,7 @@
 window.I18N = window.I18N || {};
 
 window.I18N.ru = {
-  pageTitle: "Русские шашки",
+  pageTitle: "Настольные игры",
   gameAria: "Игра в русские шашки",
   pieceCountsAria: "Количество шашек",
   boardAria: "Шашечная доска",

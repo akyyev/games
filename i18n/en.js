@@ -1,7 +1,7 @@
 window.I18N = window.I18N || {};
 
 window.I18N.en = {
-  pageTitle: "Russian Checkers",
+  pageTitle: "Board Games",
   gameAria: "Russian checkers game",
   pieceCountsAria: "Piece counts",
   boardAria: "Checker board",
