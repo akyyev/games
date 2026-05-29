@@ -1652,9 +1652,11 @@ roomCodeInput.addEventListener("input", () => {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator) || !/^https?:$/.test(window.location.protocol)) return;
-  window.addEventListener("load", () => {
+  const register = () => {
     navigator.serviceWorker.register("./service-worker.js").catch(() => {});
-  });
+  };
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
 }
 
 applyPreferences();
