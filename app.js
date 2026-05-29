@@ -1650,5 +1650,13 @@ roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = normalizeRoomId(roomCodeInput.value);
 });
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || !/^https?:$/.test(window.location.protocol)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+  });
+}
+
 applyPreferences();
 initializeGame();
+registerServiceWorker();

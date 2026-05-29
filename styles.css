@@ -92,10 +92,16 @@ body[data-board-style="porcelain"] {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   color: var(--text);
   overflow-y: scroll;
   scrollbar-gutter: stable;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
   background:
     radial-gradient(circle at 18% 12%, rgba(111, 163, 111, 0.16), transparent 30rem),
     linear-gradient(135deg, #11110f 0%, #181813 48%, #101413 100%);

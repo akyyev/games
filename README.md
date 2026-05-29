@@ -10,6 +10,7 @@ A browser-based board game app with checkers, chess, local play, computer play, 
 - Computer levels: Beginner, Club Player, Master, Grandmaster
 - Chess computer mode uses Stockfish in a browser Web Worker, with a random legal move fallback if the engine cannot load
 - Online rooms with room codes, copy code, and shareable links
+- PWA install support for iOS and modern browsers
 - Clear online states for unavailable server, expired rooms, full rooms, missing rooms, and disconnected opponents
 - English, Russian, and Turkish translations
 - Board themes: Classic wood, Tournament green, Midnight glass, Porcelain blue
